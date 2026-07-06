@@ -193,9 +193,16 @@
  "sigma_components": {
   "anchored_scale": 0.013699199232349347,
   "anchored_scale_note": "phaseF free_fixed scale_err_sym / Hbar0_anchored (SH0ES/SN anchoring).",
-  "global_fit": 0.01,
-  "global_fit_flag": "ESTIMATE",
-  "global_fit_note": "PLACEHOLDER. b_req uses the SAME fixed shape in numerator and denominator, so the dressing/shape (g_dress, Hd0, S0) and hence the Probe-R fv0 shape band (fv_req_band_dchi2_le1: fv0 in [0.6382,0.6413]) CANCELS in the ratio -- it is NOT the relevant uncertainty. The relevant quantity is the Hbar0 SCALE error of the joint SN+BAO+CMB fit, which the committed Probe-R artifacts do NOT report (no scale-direction chi2 curvature). 0.010 retained as an estimate; subdominant to sigma_lapse.",
+  "global_fit": 0.0005268200378202213,
+  "global_fit_method": "sigma(alpha)/alpha from the JOINT SN+BAO+CMB chi2 curvature vs the BAO/CMB scale alpha at the LA best-fit history (SN flat in alpha; parabola about alpha_best; sigma(alpha)=1/sqrt(0.5 d2chi2/dalpha2)); paper-2 harness bao_cmb_chi2. Replaces the prior 0.010 ESTIMATE.",
+  "global_fit_detail": {
+   "alpha_best": 37.938235773747294,
+   "sigma_alpha": 0.019986622805158023,
+   "Hbar0_glob_from_alpha": 53.723020684209914,
+   "phaseF_Hbar0_global": 53.794282522327265,
+   "d2chi2_dalpha2": 5006.695314010916
+  },
+  "global_fit_note": "COMPUTED (was ESTIMATE 0.010): the Hbar0 SCALE error of the joint SN+BAO+CMB fit. b_req uses the SAME fixed shape in numerator and denominator, so the dressing/shape (g_dress, Hd0, S0) CANCELS in the ratio; the relevant residual uncertainty is this scale error, read from the joint chi2 curvature vs alpha. Subdominant to sigma_lapse.",
   "lapse_LA_LB_V0": {
    "half_range": 0.12908607773976322,
    "std_population": 0.11769703370979895,
@@ -209,25 +216,25 @@
   }
  },
  "sigma_total": {
-  "preregistered_LA_LB_V0_halfrange": 0.1301955587792602,
-  "preregistered_LA_LB_V0_stdpop": 0.11891282438699852,
-  "sensitivity_LA_LB_only_halfrange": 0.019193458145215447
+  "preregistered_LA_LB_V0_halfrange": 0.1298120220364664,
+  "preregistered_LA_LB_V0_stdpop": 0.11849277337899303,
+  "sensitivity_LA_LB_only_halfrange": 0.016391045571420577
  },
  "diff": {
   "b_pred_minus_b_req": 0.1106356493624733,
   "note": "|b_pred(LA bound) - b_req| ; b_pred is a BOUND, not the survey-averaged value."
  },
  "nsigma": {
-  "preregistered_LA_LB_V0_halfrange": 0.8497651563526087,
-  "preregistered_LA_LB_V0_stdpop": 0.9303929154219113,
-  "sensitivity_LA_LB_only_halfrange": 5.764237404506108
+  "preregistered_LA_LB_V0_halfrange": 0.8522758341395673,
+  "preregistered_LA_LB_V0_stdpop": 0.9336911121880056,
+  "sensitivity_LA_LB_only_halfrange": 6.749761562214042
  },
  "verdict": {
   "verdict_preregistered": "RESOLVES_FRAGILE_phenomenological",
   "verdict_robust_lapse_only": "FAILS",
-  "basis": "P3 equality test |b_pred - b_req| = 0.11064 vs 1sigma = 0.13020 (nsigma = 0.850) under the pre-registered LA/LB/V0 lapse spread (half-range). Std convention gives nsigma = 0.930 -- also RESOLVES.",
+  "basis": "P3 equality test |b_pred - b_req| = 0.11064 vs 1sigma = 0.12981 (nsigma = 0.852) under the pre-registered LA/LB/V0 lapse spread (half-range). Std convention gives nsigma = 0.934 -- also RESOLVES.",
   "reading": "KINEMATIC; b_pred is the LA two-scale BOUND (void-scale maximum).",
-  "verdict_sensitivity": "FRAGILE -- the RESOLVES is an ARTIFACT of an inflated sigma, not a robust prediction:\n  (1) FLIPS TO FAILS at nsigma = 5.76 (> 2sigma) under the LA/LB-only lapse systematic, i.e. as soon as the V0 no-lapse control is excluded. V0 is the no-dressing control, arguably NOT a genuine lapse-reading of the dressing mechanism; including it inflates sigma_lapse ~14x (half-range 0.129 vs LA/LB-only 0.009).\n  (2) sigma_lapse dominates sigma_total (~10x sigma_anch, ~13x sigma_glob) and is itself dominated by the LA-V0 gap (0.240) not the genuine LA-LB gap (0.018).\n  (3) b_pred is a void-scale-MAXIMUM two-scale BOUND that FAILS the tracker window validation (gives ~9-12% on the tracker, not the cited 17-22%), so it OVER-states the survey-averaged local bias. The near-1sigma 'agreement' is not evidence the mechanism predicts b_req.",
+  "verdict_sensitivity": "FRAGILE -- the RESOLVES is an ARTIFACT of an inflated sigma, not a robust prediction:\n  (1) FLIPS TO FAILS at nsigma = 6.75 (> 2sigma) under the LA/LB-only lapse systematic, i.e. as soon as the V0 no-lapse control is excluded. V0 is the no-dressing control, arguably NOT a genuine lapse-reading of the dressing mechanism; including it inflates sigma_lapse ~14x (half-range 0.129 vs LA/LB-only 0.009).\n  (2) sigma_lapse dominates sigma_total (~10x sigma_anch, ~13x sigma_glob) and is itself dominated by the LA-V0 gap (0.240) not the genuine LA-LB gap (0.018).\n  (3) b_pred is a void-scale-MAXIMUM two-scale BOUND that FAILS the tracker window validation (gives ~9-12% on the tracker, not the cited 17-22%), so it OVER-states the survey-averaged local bias. The near-1sigma 'agreement' is not evidence the mechanism predicts b_req.",
   "what_is_established": "controls reproduce (LCDM anchored 73.53+-1.02, tracker 73.06); b_req=0.08417 recomputed exactly (adv/phaseF cross-checks agree to <1e-9) and is convention-independent; the three lapse readings LA=0.19480, LB=0.17683, V0=0.43501 bracket b_req, i.e. the two-scale expansion variance is AMPLE (mechanism not shown incapable -> NOT a hard FAILS of the mechanism). But the survey-averaged point prediction that would make RESOLVES robust is not computable here (machinery_status)."
  },
  "machinery_status": {

@@ -192,6 +192,52 @@ def _try_lb_recompute():
                     note="paper-3 rate_ratio recompute raised; LB read from 1b-A artifact.")
 
 
+def compute_sigma_global(sol):
+    """Fractional Hbar0 SCALE error of the joint SN+BAO+CMB fit at the LA best-fit
+    history (replaces the prior 0.010 ESTIMATE).
+
+    Route: Hbar0_glob = c/(alpha r_d) with alpha the BAO/CMB scale, so
+    sigma_global = sigma(Hbar0_glob)/Hbar0_glob = sigma(alpha)/alpha at the fixed LA
+    history. sigma(alpha) is read from the JOINT chi2 curvature vs alpha: the SN term
+    marginalizes M_B and is FLAT in alpha, so the absolute scale is pinned by BAO+CMB
+    (dominated by the Planck acoustic-scale point). chi2_joint(alpha) is fit by a
+    parabola about the best alpha; sigma(alpha) = 1/sqrt(0.5 d2chi2/dalpha2). Uses the
+    paper-2 harness (byte-identical sibling of paper-3's shared harness).
+    """
+    import io
+    import contextlib
+    _p2 = os.path.join(_SCIENCE, "free-history-timescape", "src")
+    if _p2 not in sys.path:
+        sys.path.insert(0, _p2)
+    with contextlib.redirect_stdout(io.StringIO()):
+        import harness as H
+    rows = H.bao_cmb_rows()
+    g = np.array([sol.predict(z, k) for (z, k, _v, _e, _c) in rows])
+    Cinv, DV = H._CINV, H._DV
+    _, alpha_best = H.bao_cmb_chi2(sol.predict)       # analytic best alpha at fixed shape
+    zHD = H.load_sn()[0]
+    chi2_sn = float(H.sn_chi2(sol.D_M(zHD)))          # constant in alpha (M_B marginalized)
+
+    def chi2_joint(a):
+        r = DV - a * g
+        return chi2_sn + float(r @ (Cinv @ r))
+
+    da = 0.02 * alpha_best
+    alphas = alpha_best + da * np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+    chi2s = np.array([chi2_joint(a) for a in alphas])
+    d2chi2 = 2.0 * float(np.polyfit(alphas, chi2s, 2)[0])   # d2chi2/dalpha2 from the parabola
+    sigma_alpha = 1.0 / np.sqrt(0.5 * d2chi2)
+    Hbar0_glob = float(H.H0_from_alpha(alpha_best))
+    return dict(
+        sigma_global=float(sigma_alpha / alpha_best),
+        alpha_best=float(alpha_best), sigma_alpha=float(sigma_alpha),
+        Hbar0_glob_from_alpha=Hbar0_glob, d2chi2_dalpha2=d2chi2,
+        method=("sigma(alpha)/alpha from the JOINT SN+BAO+CMB chi2 curvature vs the BAO/CMB "
+                "scale alpha at the LA best-fit history (SN flat in alpha; parabola about "
+                "alpha_best; sigma(alpha)=1/sqrt(0.5 d2chi2/dalpha2)); paper-2 harness "
+                "bao_cmb_chi2. Replaces the prior 0.010 ESTIMATE."))
+
+
 def main():
     phaseF = json.load(open(PHASEF))
     adv = json.load(open(ADV))
@@ -217,7 +263,8 @@ def main():
     tracker_gate_pass = any(in_win.values())
 
     # ---- the THREE lapse readings of the two-scale excess at z=0 ----
-    dLA = two_scale_at_z0(solve_free(FV_NODES_V, "algebraic"), "algebraic")   # LA (recomputed)
+    solLA = solve_free(FV_NODES_V, "algebraic")
+    dLA = two_scale_at_z0(solLA, "algebraic")                                 # LA (recomputed)
     dV0 = two_scale_at_z0(solve_free(FV_NODES_V0, "none"), "none")            # V0 (recomputed)
     dLB, lb_source, lb_recompute = load_lb()                                  # LB (read, 1b-A)
     out["free_history_LA"] = dLA
@@ -278,7 +325,10 @@ def main():
 
     # ---- sigma (PLAN P3): anchored (+) global (+) lapse-reading spread, in quadrature ----
     sig_anch = scale_err / Hbar0_anch
-    sig_glob = 0.010  # ESTIMATE (see label below)
+    # sigma_global: real fractional Hbar0 SCALE error of the joint SN+BAO+CMB fit at the LA
+    # best-fit history (Fix: replaces the prior 0.010 ESTIMATE). Subdominant to sigma_lapse.
+    glob = compute_sigma_global(solLA)
+    sig_glob = float(glob["sigma_global"])
     lapse3 = np.array([LA, LB, V0])
     lapse_LALBV0_halfrange = float((lapse3.max() - lapse3.min()) / 2.0)
     lapse_LALBV0_std_pop = float(np.std(lapse3, ddof=0))
@@ -297,14 +347,16 @@ def main():
         anchored_scale=float(sig_anch),
         anchored_scale_note="phaseF free_fixed scale_err_sym / Hbar0_anchored (SH0ES/SN anchoring).",
         global_fit=float(sig_glob),
-        global_fit_flag="ESTIMATE",
-        global_fit_note=("PLACEHOLDER. b_req uses the SAME fixed shape in numerator and "
-                         "denominator, so the dressing/shape (g_dress, Hd0, S0) and hence the "
-                         "Probe-R fv0 shape band (fv_req_band_dchi2_le1: fv0 in [0.6382,0.6413]) "
-                         "CANCELS in the ratio -- it is NOT the relevant uncertainty. The relevant "
-                         "quantity is the Hbar0 SCALE error of the joint SN+BAO+CMB fit, which the "
-                         "committed Probe-R artifacts do NOT report (no scale-direction chi2 "
-                         "curvature). 0.010 retained as an estimate; subdominant to sigma_lapse."),
+        global_fit_method=glob["method"],
+        global_fit_detail=dict(alpha_best=glob["alpha_best"], sigma_alpha=glob["sigma_alpha"],
+                               Hbar0_glob_from_alpha=glob["Hbar0_glob_from_alpha"],
+                               phaseF_Hbar0_global=Hbar0_glob,
+                               d2chi2_dalpha2=glob["d2chi2_dalpha2"]),
+        global_fit_note=("COMPUTED (was ESTIMATE 0.010): the Hbar0 SCALE error of the joint "
+                         "SN+BAO+CMB fit. b_req uses the SAME fixed shape in numerator and "
+                         "denominator, so the dressing/shape (g_dress, Hd0, S0) CANCELS in the "
+                         "ratio; the relevant residual uncertainty is this scale error, read from "
+                         "the joint chi2 curvature vs alpha. Subdominant to sigma_lapse."),
         lapse_LA_LB_V0=dict(
             half_range=lapse_LALBV0_halfrange,
             std_population=lapse_LALBV0_std_pop,
@@ -421,7 +473,7 @@ def main():
     print(f"  b_req  (recomputed)        = {b_req:.5f}   [adv xcheck err {abs(b_req-b_req_adv):.1e}]")
     print(f"  diff                       = {diff:.5f}")
     print("=== sigma ===")
-    print(f"  sig_anch={sig_anch:.5f}  sig_glob={sig_glob:.5f}(EST)")
+    print(f"  sig_anch={sig_anch:.5f}  sig_glob={sig_glob:.6f}(COMPUTED)")
     print(f"  sig_lapse LA/LB/V0 half-range = {lapse_LALBV0_halfrange:.5f}  (std_pop {lapse_LALBV0_std_pop:.5f})")
     print(f"  sig_lapse LA/LB-only half-rng = {lapse_LALBonly_halfrange:.5f}")
     print(f"  sigma_total prereg (LA/LB/V0) = {sigma_total_prereg:.5f}  -> nsigma={ns_prereg:.3f} -> {verdict_of(ns_prereg)}")

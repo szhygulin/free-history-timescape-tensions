@@ -190,45 +190,86 @@
   "crosscheck_abs_err": 9.769962616701378e-14,
   "crosscheck_phaseF": 0.08416615584147968
  },
+ "r_hom_star": {
+  "r_hom_star": 139.96790561003817,
+  "target_phi_hf": 0.2501240557869945,
+  "formula": "<phi>_HF(r_void=30, r_hom_star) = b_req/E_max(LA); monotone root-find over the 277 USED_IN_SH0ES_HF SNe (zCMB, raised_cosine primary).",
+  "by_form": {
+   "raised_cosine": 139.96790561003817,
+   "linear": 135.81230050026815,
+   "smootherstep": 141.08763887766113
+  },
+  "declared_r_hom_range": [
+   80.0,
+   120.0
+  ],
+  "outside_declared_range": true,
+  "twompp_homogeneity_scale": 137.5,
+  "excluded_by_2Mpp": true,
+  "note": "r_hom_star=140.0 h^-1 Mpc is the profile decay scale that would lift b_pred_survey to b_req. It lies OUTSIDE Wiltshire's declared r_hom band [80,120] (the robust exclusion) and at/beyond the 2M++ (Carrick+15) homogeneity scale (~137.5 h^-1 Mpc, where the cumulative overdensity |delta(<r)|<0.02, margin thin): the density field is already homogeneous there, so an apparent-H0 bump persisting to r_hom_star has no source. The admissible r_hom (~100, band [80,120]) keeps the ENTIRE phi band below b_req."
+ },
  "sigma_components": {
   "anchored_scale": 0.013699199232349347,
   "anchored_scale_note": "phaseF free_fixed scale_err_sym / Hbar0_anchored (SH0ES/SN anchoring).",
-  "global_fit": 0.01,
-  "global_fit_flag": "ESTIMATE",
-  "global_fit_note": "PLACEHOLDER: b_req's fixed shape cancels; the relevant Hbar0 SCALE error is not reported by Probe-R. Subdominant to sigma_phi.",
+  "global_fit": 0.0005268200378202213,
+  "global_fit_method": "sigma(alpha)/alpha from the JOINT SN+BAO+CMB chi2 curvature vs the BAO/CMB scale alpha at the LA best-fit history (SN flat in alpha; parabola about alpha_best; sigma(alpha)=1/sqrt(0.5 d2chi2/dalpha2)); paper-2 harness bao_cmb_chi2. Replaces the prior 0.010 ESTIMATE.",
+  "global_fit_detail": {
+   "alpha_best": 37.938235773747294,
+   "sigma_alpha": 0.019986622805158023,
+   "Hbar0_glob_from_alpha": 53.723020684209914,
+   "phaseF_Hbar0_global": 53.794282522327265,
+   "d2chi2_dalpha2": 5006.695314010916
+  },
+  "global_fit_note": "COMPUTED (was ESTIMATE 0.010): fractional Hbar0 scale error from the joint chi2 curvature vs alpha; subdominant to sigma_phi and sigma_lapse.",
   "lapse_LA_LB_halfrange": 0.004570262124406728,
   "lapse_note": "LA/LB lapse-reading spread on b_pred_survey; V0 excluded (no-dressing control).",
   "phi_shape_halfrange": 0.03554015164426868,
   "phi_shape_flag": "DOMINANT",
   "phi_shape_note": "Dominant systematic: the radial-profile form + (r_void, r_hom) band."
  },
- "sigma_total": 0.03964413871420341,
- "sigma_measurement_only": 0.017565743807006512,
+ "sigma_total": 0.03836580865488502,
+ "sigma_measurement_only": 0.014451051686491075,
  "diff": {
   "b_pred_survey_minus_b_req": -0.06015929714854927
  },
- "nsigma": 1.5174827628931649,
- "nsigma_measurement_only": 3.4248078424412243,
+ "nsigma": 1.5680445495025253,
+ "nsigma_measurement_only": 4.162970173637018,
  "verdict": {
-  "verdict_preregistered": "PARTIAL_FRAGILE",
-  "verdict_robust": "FAILS|PARTIAL|RESOLVES",
+  "verdict_preregistered": "PARTIAL",
+  "verdict_robust": "FAILS",
   "verdict_measurement_sigma_only": "FAILS",
-  "robust": false,
-  "headline": "UNDER-PREDICTS: b_pred_survey (central 0.02401) < b_req (0.08417) at the central value and across the ENTIRE systematic band. The pre-registered nsigma=1.52 (PARTIAL_FRAGILE) is PARTIAL only because the dominant phi-shape THEORETICAL systematic (half-range 0.03554) inflates sigma; dropping it (measurement-only sigma 0.01757) gives nsigma=3.42 -> FAILS. The dressing mechanism does not produce the required survey-averaged local bias even with the corrected (larger) void-scale maximum E_max=0.33650.",
-  "basis": "P3 equality test |b_pred_survey - b_req| = 0.06016 vs 1sigma = 0.03964 (nsigma = 1.517). b_pred_survey = 0.02401 (LA, raised_cosine, r_void=30, r_hom=100, zCMB); b_req = 0.08417.",
+  "robust": true,
+  "envelope_one_sided": true,
+  "r_hom_star": 139.96790561003817,
+  "r_hom_star_excluded_by_2Mpp": true,
+  "headline": "UNDER-PREDICTS -> FAILS. b_pred_survey (central 0.02401) < b_req (0.08417) at the central value AND across the ENTIRE admissible phi band (max 0.07201 < b_req): the mechanism under-predicts the required survey-averaged local bias for EVERY admissible phi (one-sided). ROBUST statement = measurement-only sigma (0.01445, excluding the theoretical phi band) -> nsigma=4.16 -> FAILS. The pre-registered nsigma=1.57 (PARTIAL) is softened ONLY by the wide phi-shape THEORETICAL systematic (half-range 0.03554) inflating sigma, not by any agreement -- and NO per-corner nsigma is formed by dividing a phi-band edge by sigma_total (that double-counts sigma_phi and is what spuriously printed RESOLVES). Matching b_req would require r_hom_star=140.0 h^-1 Mpc, outside the declared r_hom band [80,120] and at/beyond the 2M++ homogeneity scale (~137.5) -- physically excluded.",
+  "basis": "P3 equality test |b_pred_survey - b_req| = 0.06016. ROBUST (measurement-only) sigma = 0.01445 -> nsigma = 4.163 -> FAILS. Pre-registered (phi-inflated) sigma = 0.03837 -> nsigma = 1.568 -> PARTIAL. b_pred_survey = 0.02401 (LA, raised_cosine, r_void=30, r_hom=100, zCMB); b_req = 0.08417.",
   "thresholds": "RESOLVES nsigma<=1 ; PARTIAL <=2 ; FAILS >2 (PLAN P3).",
   "envelope_check": {
    "b_env_lo": 0.0004102835720042392,
    "b_env_hi": 0.07200974428418158,
-   "nsigma_env_lo": 2.1126924429680702,
-   "nsigma_env_hi": 0.30663830648294027,
-   "verdict_env_lo": "FAILS",
-   "verdict_env_hi": "RESOLVES"
+   "b_req": 0.08416615584147968,
+   "envelope_one_sided": true,
+   "r_hom_star": 139.96790561003817,
+   "r_hom_star_target_phi_hf": 0.2501240557869945,
+   "r_hom_star_by_form": {
+    "raised_cosine": 139.96790561003817,
+    "linear": 135.81230050026815,
+    "smootherstep": 141.08763887766113
+   },
+   "declared_r_hom_range": [
+    80.0,
+    120.0
+   ],
+   "r_hom_star_outside_declared_range": true,
+   "twompp_homogeneity_scale": 137.5,
+   "r_hom_star_excluded_by_2Mpp": true,
+   "note": "ONE-SIDED: the ENTIRE admissible phi band [0.00041, 0.07201] lies below b_req=0.08417, so the mechanism under-predicts for EVERY admissible phi. NO per-corner nsigma is formed from a band-edge / sigma_total ratio -- that double-counts sigma_phi (the phi variation already IS the band edge) and spuriously printed RESOLVES (~0.31 sigma) at the high corner. Robust statement = measurement-only sigma -> FAILS at nsigma=4.16. Matching b_req needs r_hom_star=140.0 h^-1 Mpc, OUTSIDE the declared r_hom band [80,120] and at/beyond the 2M++ homogeneity scale (~137.5)."
   },
   "under_prediction": {
    "b_pred_below_b_req_at_central": true,
    "b_pred_below_b_req_across_full_band": true,
-   "note": "b_pred_survey UNDER-predicts b_req at the central value AND across the ENTIRE systematic band (max 0.07201 < b_req 0.08417): the dressing mechanism does not produce the required survey-averaged local bias even with the corrected (larger) void-scale maximum. This is a DIRECTIONAL FAILS (under-prediction); the pre-registered nsigma is softened only by the wide phi-shape systematic, not by agreement."
+   "note": "b_pred_survey UNDER-predicts b_req at the central value AND across the ENTIRE systematic band (max 0.07201 < b_req 0.08417): one-sided under-prediction for every admissible phi. This is a DIRECTIONAL FAILS; the pre-registered nsigma is softened only by the wide phi-shape systematic, not by agreement, and the measurement-only sigma gives FAILS at 4.16 sigma."
   },
   "dilution_finding": "The void-scale MAXIMUM E_max(LA)=0.33650 is diluted to b_pred_survey=0.02401 (14.0x) because the ladder's H0 traces the apparent rate at the Hubble-flow SNe: <phi>_HF=0.071 (r~69-450, ~58% past r_hom -> phi->0). The calibrators sit deep in the bump (<phi>_calib=0.994) but only fix M_B via geometric distances, so their enhancement does not enter the bias."
  },

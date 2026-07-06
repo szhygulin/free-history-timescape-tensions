@@ -48,6 +48,7 @@ import sys
 import json
 import warnings
 import numpy as np
+from scipy.optimize import brentq
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SRC = os.path.abspath(os.path.join(_HERE, ".."))
@@ -309,6 +310,73 @@ def twompp_homogeneity_scale():
                   "are Wiltshire's declared values, not fitted here."))
     except Exception as e:  # pragma: no cover
         return dict(available=False, error=repr(e))
+
+
+# ---------------------------------------------------------------------------
+# global-fit Hbar0 SCALE error: sigma_global = sigma(Hbar0_glob)/Hbar0_glob
+# ---------------------------------------------------------------------------
+def compute_sigma_global(sol):
+    """Fractional Hbar0 SCALE error of the joint SN+BAO+CMB fit at the LA best-fit
+    history (replaces the prior 0.010 ESTIMATE).
+
+    Route: Hbar0_glob = c/(alpha r_d) with alpha the BAO/CMB scale, so
+    sigma_global = sigma(Hbar0_glob)/Hbar0_glob = sigma(alpha)/alpha at the fixed LA
+    history. sigma(alpha) is read from the JOINT chi2 curvature vs alpha: the SN term
+    marginalizes M_B and is FLAT in alpha, so the absolute scale is pinned by BAO+CMB
+    (dominated by the Planck acoustic-scale point). chi2_joint(alpha) is fit by a
+    parabola about the best alpha; sigma(alpha) = 1/sqrt(0.5 d2chi2/dalpha2). Uses the
+    paper-2 harness (byte-identical sibling of paper-3's shared harness).
+    """
+    import io
+    import contextlib
+    _p2 = os.path.join(_SCIENCE, "free-history-timescape", "src")
+    if _p2 not in sys.path:
+        sys.path.insert(0, _p2)
+    with contextlib.redirect_stdout(io.StringIO()):
+        import harness as H
+    rows = H.bao_cmb_rows()
+    g = np.array([sol.predict(z, k) for (z, k, _v, _e, _c) in rows])
+    Cinv, DV = H._CINV, H._DV
+    _, alpha_best = H.bao_cmb_chi2(sol.predict)       # analytic best alpha at fixed shape
+    zHD = H.load_sn()[0]
+    chi2_sn = float(H.sn_chi2(sol.D_M(zHD)))          # constant in alpha (M_B marginalized)
+
+    def chi2_joint(a):
+        r = DV - a * g
+        return chi2_sn + float(r @ (Cinv @ r))
+
+    da = 0.02 * alpha_best
+    alphas = alpha_best + da * np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
+    chi2s = np.array([chi2_joint(a) for a in alphas])
+    d2chi2 = 2.0 * float(np.polyfit(alphas, chi2s, 2)[0])   # d2chi2/dalpha2 from the parabola
+    sigma_alpha = 1.0 / np.sqrt(0.5 * d2chi2)
+    Hbar0_glob = float(H.H0_from_alpha(alpha_best))
+    return dict(
+        sigma_global=float(sigma_alpha / alpha_best),
+        alpha_best=float(alpha_best), sigma_alpha=float(sigma_alpha),
+        Hbar0_glob_from_alpha=Hbar0_glob, d2chi2_dalpha2=d2chi2,
+        method=("sigma(alpha)/alpha from the JOINT SN+BAO+CMB chi2 curvature vs the BAO/CMB "
+                "scale alpha at the LA best-fit history (SN flat in alpha; parabola about "
+                "alpha_best; sigma(alpha)=1/sqrt(0.5 d2chi2/dalpha2)); paper-2 harness "
+                "bao_cmb_chi2. Replaces the prior 0.010 ESTIMATE."))
+
+
+def solve_rhom_star(E_max, r_hf, b_req_val, r_void=R_VOID_CENTRAL, form=PHI_FORM_CENTRAL):
+    """r_hom that WOULD make b_pred_survey = b_req: <phi>_HF(r_void, r_hom) = b_req/E_max.
+
+    <phi>_HF is monotone increasing in r_hom, so a bracketed root exists whenever the
+    target b_req/E_max is reachable (< 1). Returns (r_hom_star, target); r_hom_star is
+    None if the target exceeds the reachable maximum.
+    """
+    target = float(b_req_val) / float(E_max)
+
+    def resid(r_hom):
+        return float(np.mean(phi_profile(r_hf, r_void, r_hom, form))) - target
+
+    lo, hi = float(r_void) + 1e-6, 5000.0
+    if resid(hi) < 0.0:                     # target unreachable even for a very large r_hom
+        return None, target
+    return float(brentq(resid, lo, hi, xtol=1e-4)), target
 
 
 # ---------------------------------------------------------------------------
@@ -574,9 +642,48 @@ def main():
         crosscheck_phaseF=float(phaseF["delta_local_excess"]["excess_Hbar0_local_over_global"]),
     )
 
+    # =====================================================================
+    # r_hom_star: the homogeneity scale that WOULD make b_pred_survey = b_req, and its
+    # physical exclusion. Closes the soft "resolves-at-a-corner" reading: to reach b_req
+    # the profile decay scale must be pushed OUTSIDE the declared r_hom band [80,120] and
+    # to/beyond the 2M++ homogeneity scale, where the density field is already homogeneous.
+    # =====================================================================
+    twompp = twompp_homogeneity_scale()
+    twompp_rhom = twompp.get("r_homogeneity_est_cum_lt_0p02")
+    r_hom_star, r_hom_star_target = solve_rhom_star(E_max_LA, rh_cmb, b_req)
+    r_hom_star_by_form = {}
+    for _fm in ["raised_cosine", "linear", "smootherstep"]:
+        _rs, _ = solve_rhom_star(E_max_LA, rh_cmb, b_req, form=_fm)
+        r_hom_star_by_form[_fm] = _rs
+    r_hom_star_outside_declared = bool(r_hom_star is not None and r_hom_star > R_HOM_RANGE[1])
+    r_hom_star_excluded = bool(
+        r_hom_star is not None and twompp_rhom is not None and r_hom_star >= float(twompp_rhom))
+    out["r_hom_star"] = dict(
+        r_hom_star=r_hom_star,
+        target_phi_hf=r_hom_star_target,
+        formula="<phi>_HF(r_void=30, r_hom_star) = b_req/E_max(LA); monotone root-find over "
+                "the 277 USED_IN_SH0ES_HF SNe (zCMB, raised_cosine primary).",
+        by_form=r_hom_star_by_form,
+        declared_r_hom_range=list(R_HOM_RANGE),
+        outside_declared_range=r_hom_star_outside_declared,
+        twompp_homogeneity_scale=twompp_rhom,
+        excluded_by_2Mpp=r_hom_star_excluded,
+        note=("r_hom_star=%.1f h^-1 Mpc is the profile decay scale that would lift b_pred_survey "
+              "to b_req. It lies OUTSIDE Wiltshire's declared r_hom band [%.0f,%.0f] (the robust "
+              "exclusion) and at/beyond the 2M++ (Carrick+15) homogeneity scale (~%s h^-1 Mpc, "
+              "where the cumulative overdensity |delta(<r)|<0.02, margin thin): the density field "
+              "is already homogeneous there, so an apparent-H0 bump persisting to r_hom_star has "
+              "no source. The admissible r_hom (~100, band [80,120]) keeps the ENTIRE phi band "
+              "below b_req."
+              % ((r_hom_star if r_hom_star is not None else float('nan')),
+                 R_HOM_RANGE[0], R_HOM_RANGE[1], str(twompp_rhom))),
+    )
+
     sig_anch = scale_err / Hbar0_anch
-    sig_glob = 0.010  # ESTIMATE (b_req's fixed shape cancels; only the Hbar0 SCALE error matters,
-                      # not reported by Probe-R; retained as a subdominant placeholder)
+    # sigma_global: real fractional Hbar0 SCALE error of the joint SN+BAO+CMB fit at the LA
+    # best-fit history (Fix: replaces the prior 0.010 ESTIMATE). Subdominant to sigma_phi.
+    glob = compute_sigma_global(solA)
+    sig_glob = float(glob["sigma_global"])
     sigma_total = float(np.sqrt(sig_anch ** 2 + sig_glob ** 2 + sig_lapse ** 2 + sig_phi ** 2))
     # measurement-only sigma EXCLUDES the theoretical phi-shape band -- exposes whether the
     # pre-registered verdict is carried by agreement or by an inflated theoretical systematic.
@@ -584,9 +691,14 @@ def main():
     out["sigma_components"] = dict(
         anchored_scale=float(sig_anch),
         anchored_scale_note="phaseF free_fixed scale_err_sym / Hbar0_anchored (SH0ES/SN anchoring).",
-        global_fit=float(sig_glob), global_fit_flag="ESTIMATE",
-        global_fit_note="PLACEHOLDER: b_req's fixed shape cancels; the relevant Hbar0 SCALE error is "
-                        "not reported by Probe-R. Subdominant to sigma_phi.",
+        global_fit=float(sig_glob),
+        global_fit_method=glob["method"],
+        global_fit_detail=dict(alpha_best=glob["alpha_best"], sigma_alpha=glob["sigma_alpha"],
+                               Hbar0_glob_from_alpha=glob["Hbar0_glob_from_alpha"],
+                               phaseF_Hbar0_global=Hbar0_glob,
+                               d2chi2_dalpha2=glob["d2chi2_dalpha2"]),
+        global_fit_note="COMPUTED (was ESTIMATE 0.010): fractional Hbar0 scale error from the joint "
+                        "chi2 curvature vs alpha; subdominant to sigma_phi and sigma_lapse.",
         lapse_LA_LB_halfrange=float(sig_lapse),
         lapse_note="LA/LB lapse-reading spread on b_pred_survey; V0 excluded (no-dressing control).",
         phi_shape_halfrange=float(sig_phi),
@@ -606,46 +718,82 @@ def main():
     def verdict_of(ns):
         return "RESOLVES" if ns <= 1.0 else ("PARTIAL" if ns <= 2.0 else "FAILS")
 
-    # Robustness: does the verdict hold across the full systematic envelope of b_pred_survey?
-    ns_env_lo = float(abs(float(band_full.min()) - b_req) / sigma_total)
-    ns_env_hi = float(abs(float(band_full.max()) - b_req) / sigma_total)
-    v_central = verdict_of(nsigma)
-    v_env_lo = verdict_of(ns_env_lo)
-    v_env_hi = verdict_of(ns_env_hi)
-    robust = (v_central == v_env_lo == v_env_hi)
-    primary_token = v_central + ("" if robust else "_FRAGILE")
-    v_robust = v_central if robust else "|".join(sorted(set([v_central, v_env_lo, v_env_hi])))
+    v_central = verdict_of(nsigma)        # pre-registered, sigma_total (phi-inflated)
+    v_meas = verdict_of(nsigma_meas)      # measurement-only sigma (excludes the phi band)
 
-    v_meas = verdict_of(nsigma_meas)
+    # ONE-SIDED envelope. The ENTIRE admissible phi band [b_env_lo, b_env_hi] lies BELOW
+    # b_req, so the mechanism under-predicts for EVERY admissible phi. We therefore do NOT
+    # form a per-corner nsigma by dividing a phi-band EDGE by sigma_total -- that double-
+    # counts sigma_phi (the phi variation IS the band edge) and spuriously printed RESOLVES
+    # (~0.31 sigma) at the high corner. The robust statement is the measurement-only sigma
+    # (which excludes the phi band): FAILS at nsigma_meas. Reaching b_req would need r_hom_star,
+    # outside the declared r_hom band [80,120] and at/beyond the 2M++ homogeneity scale.
+    b_env_lo = float(band_full.min())
+    b_env_hi = float(band_full.max())
+    envelope_one_sided = bool(b_env_hi < b_req)
+    v_robust = v_meas                     # measurement-only sigma -> FAILS at ~4 sigma
+    robust = bool(envelope_one_sided and v_meas == "FAILS")
+    primary_token = v_central             # no "_FRAGILE": the RESOLVES corner was a sigma_phi
+                                          # double-count; the one-sided band admits no resolution.
+
     out["verdict"] = dict(
         verdict_preregistered=primary_token,
         verdict_robust=v_robust,
         verdict_measurement_sigma_only=v_meas,
         robust=bool(robust),
-        headline=("UNDER-PREDICTS: b_pred_survey (central %.5f) < b_req (%.5f) at the central value "
-                  "and across the ENTIRE systematic band. The pre-registered nsigma=%.2f (%s) is "
-                  "PARTIAL only because the dominant phi-shape THEORETICAL systematic (half-range "
-                  "%.5f) inflates sigma; dropping it (measurement-only sigma %.5f) gives nsigma=%.2f "
-                  "-> %s. The dressing mechanism does not produce the required survey-averaged local "
-                  "bias even with the corrected (larger) void-scale maximum E_max=%.5f."
-                  % (b_central, b_req, nsigma, primary_token, sig_phi, sigma_meas_only,
-                     nsigma_meas, v_meas, E_max_LA)),
-        basis=("P3 equality test |b_pred_survey - b_req| = %.5f vs 1sigma = %.5f (nsigma = %.3f). "
-               "b_pred_survey = %.5f (LA, raised_cosine, r_void=30, r_hom=100, zCMB); b_req = %.5f."
-               % (abs(diff), sigma_total, nsigma, b_central, b_req)),
+        envelope_one_sided=envelope_one_sided,
+        r_hom_star=r_hom_star,
+        r_hom_star_excluded_by_2Mpp=r_hom_star_excluded,
+        headline=("UNDER-PREDICTS -> FAILS. b_pred_survey (central %.5f) < b_req (%.5f) at the "
+                  "central value AND across the ENTIRE admissible phi band (max %.5f < b_req): the "
+                  "mechanism under-predicts the required survey-averaged local bias for EVERY "
+                  "admissible phi (one-sided). ROBUST statement = measurement-only sigma (%.5f, "
+                  "excluding the theoretical phi band) -> nsigma=%.2f -> %s. The pre-registered "
+                  "nsigma=%.2f (%s) is softened ONLY by the wide phi-shape THEORETICAL systematic "
+                  "(half-range %.5f) inflating sigma, not by any agreement -- and NO per-corner "
+                  "nsigma is formed by dividing a phi-band edge by sigma_total (that double-counts "
+                  "sigma_phi and is what spuriously printed RESOLVES). Matching b_req would require "
+                  "r_hom_star=%.1f h^-1 Mpc, outside the declared r_hom band [%.0f,%.0f] and "
+                  "at/beyond the 2M++ homogeneity scale (~%s) -- physically excluded."
+                  % (b_central, b_req, b_env_hi, sigma_meas_only, nsigma_meas, v_meas, nsigma,
+                     primary_token, sig_phi,
+                     (r_hom_star if r_hom_star is not None else float('nan')),
+                     R_HOM_RANGE[0], R_HOM_RANGE[1], str(twompp_rhom))),
+        basis=("P3 equality test |b_pred_survey - b_req| = %.5f. ROBUST (measurement-only) sigma = "
+               "%.5f -> nsigma = %.3f -> %s. Pre-registered (phi-inflated) sigma = %.5f -> nsigma = "
+               "%.3f -> %s. b_pred_survey = %.5f (LA, raised_cosine, r_void=30, r_hom=100, zCMB); "
+               "b_req = %.5f."
+               % (abs(diff), sigma_meas_only, nsigma_meas, v_meas, sigma_total, nsigma,
+                  primary_token, b_central, b_req)),
         thresholds="RESOLVES nsigma<=1 ; PARTIAL <=2 ; FAILS >2 (PLAN P3).",
-        envelope_check=dict(b_env_lo=float(band_full.min()), b_env_hi=float(band_full.max()),
-                            nsigma_env_lo=ns_env_lo, nsigma_env_hi=ns_env_hi,
-                            verdict_env_lo=v_env_lo, verdict_env_hi=v_env_hi),
+        envelope_check=dict(
+            b_env_lo=b_env_lo, b_env_hi=b_env_hi, b_req=b_req,
+            envelope_one_sided=envelope_one_sided,
+            r_hom_star=r_hom_star, r_hom_star_target_phi_hf=r_hom_star_target,
+            r_hom_star_by_form=r_hom_star_by_form,
+            declared_r_hom_range=list(R_HOM_RANGE),
+            r_hom_star_outside_declared_range=r_hom_star_outside_declared,
+            twompp_homogeneity_scale=twompp_rhom,
+            r_hom_star_excluded_by_2Mpp=r_hom_star_excluded,
+            note=("ONE-SIDED: the ENTIRE admissible phi band [%.5f, %.5f] lies below b_req=%.5f, so "
+                  "the mechanism under-predicts for EVERY admissible phi. NO per-corner nsigma is "
+                  "formed from a band-edge / sigma_total ratio -- that double-counts sigma_phi (the "
+                  "phi variation already IS the band edge) and spuriously printed RESOLVES (~0.31 "
+                  "sigma) at the high corner. Robust statement = measurement-only sigma -> %s at "
+                  "nsigma=%.2f. Matching b_req needs r_hom_star=%.1f h^-1 Mpc, OUTSIDE the declared "
+                  "r_hom band [%.0f,%.0f] and at/beyond the 2M++ homogeneity scale (~%s)."
+                  % (b_env_lo, b_env_hi, b_req, v_meas, nsigma_meas,
+                     (r_hom_star if r_hom_star is not None else float('nan')),
+                     R_HOM_RANGE[0], R_HOM_RANGE[1], str(twompp_rhom)))),
         under_prediction=dict(
             b_pred_below_b_req_at_central=bool(b_central < b_req),
             b_pred_below_b_req_across_full_band=bool(float(band_full.max()) < b_req),
             note=("b_pred_survey UNDER-predicts b_req at the central value AND across the ENTIRE "
-                  "systematic band (max %.5f < b_req %.5f): the dressing mechanism does not produce "
-                  "the required survey-averaged local bias even with the corrected (larger) "
-                  "void-scale maximum. This is a DIRECTIONAL FAILS (under-prediction); the "
-                  "pre-registered nsigma is softened only by the wide phi-shape systematic, not by "
-                  "agreement." % (float(band_full.max()), b_req))),
+                  "systematic band (max %.5f < b_req %.5f): one-sided under-prediction for every "
+                  "admissible phi. This is a DIRECTIONAL FAILS; the pre-registered nsigma is "
+                  "softened only by the wide phi-shape systematic, not by agreement, and the "
+                  "measurement-only sigma gives FAILS at %.2f sigma."
+                  % (float(band_full.max()), b_req, nsigma_meas))),
         dilution_finding=("The void-scale MAXIMUM E_max(LA)=%.5f is diluted to b_pred_survey=%.5f "
                           "(%.1fx) because the ladder's H0 traces the apparent rate at the "
                           "Hubble-flow SNe: <phi>_HF=%.3f (r~69-450, ~%.0f%% past r_hom -> phi->0). "
@@ -658,9 +806,10 @@ def main():
     )
 
     # =====================================================================
-    # 2M++ homogeneity cross-check (optional; declared systematic)
+    # 2M++ homogeneity cross-check (optional; declared systematic) -- computed above for
+    # the r_hom_star exclusion; reused here.
     # =====================================================================
-    out["twompp_crosscheck"] = twompp_homogeneity_scale()
+    out["twompp_crosscheck"] = twompp
 
     # =====================================================================
     # machinery status
@@ -709,14 +858,15 @@ def main():
     print(f"  E_max(LB) reading b_pred_survey = {b_lb:.5f}")
     print("=== b_req / sigma / verdict ===")
     print(f"  b_req = {b_req:.5f}  (adv xcheck err {abs(b_req-b_req_adv):.1e})")
-    print(f"  sigma: anch={sig_anch:.5f} glob={sig_glob:.5f}(EST) lapse={sig_lapse:.5f} "
+    print(f"  sigma: anch={sig_anch:.5f} glob={sig_glob:.6f}(COMPUTED) lapse={sig_lapse:.5f} "
           f"phi={sig_phi:.5f}(DOM) -> total={sigma_total:.5f}")
-    print(f"  diff = {diff:.5f}  nsigma = {nsigma:.3f}  ({primary_token})")
+    print(f"  diff = {diff:.5f}  nsigma = {nsigma:.3f}  (pre-registered {primary_token})")
     print(f"  measurement-only sigma (no phi band) = {sigma_meas_only:.5f} -> nsigma = "
-          f"{nsigma_meas:.3f} ({v_meas})")
-    print(f"  UNDER-PREDICTS: b_pred_survey < b_req at central AND across full band "
-          f"(band max {band_full.max():.5f} < b_req {b_req:.5f})")
-    print(f"  VERDICT (pre-registered) = {primary_token}   robust = {v_robust}")
+          f"{nsigma_meas:.3f} ({v_meas})  [ROBUST]")
+    print(f"  ONE-SIDED: entire phi band < b_req (band max {band_full.max():.5f} < b_req {b_req:.5f})")
+    print(f"  r_hom_star = {r_hom_star:.1f} h^-1 Mpc  (declared band [80,120], 2M++ {twompp_rhom}); "
+          f"outside_declared={r_hom_star_outside_declared}  excluded_by_2Mpp={r_hom_star_excluded}")
+    print(f"  VERDICT robust = {v_robust}   pre-registered = {primary_token}")
     print(f"  dilution: E_max {E_max_LA:.4f} -> b_pred_survey {b_central:.4f} "
           f"({(E_max_LA/b_central) if b_central else float('inf'):.1f}x)")
     print(f"wrote {OUT}")

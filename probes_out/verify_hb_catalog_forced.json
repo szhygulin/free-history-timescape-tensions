@@ -78,5 +78,6 @@
   "[INFO] VERDICT b_pred band max 0.014069 < fitted b_req 0.08417: True ; < b_req^obs 0.31957: True -> FAILS=True"
  ],
  "discrepancies": [],
- "runtime_s": 1.04
+ "runtime_s": 1.04,
+ "verdict_of_verification": "SURVIVES"
 }

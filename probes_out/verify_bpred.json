@@ -183,5 +183,6 @@
   "v0_in_sigma_position": "V0 does NOT belong in the lapse sigma. It is the no-dressing NULL control (gamma_bar==1), not a second convention for reading the same dressing lapse. Its inclusion inflates sigma_lapse ~14x and is the sole reason nsigma drops below 1.",
   "resolves_robust_or_artifact": "ARTIFACT. RESOLVES holds only because V0 inflates the denominator; on the genuine LA/LB lapse ambiguity the gap is 5.76 sigma (FAILS). Not a robust prediction.",
   "framing_honesty": "HONEST but exploitable. The JSON's verdict.verdict_preregistered field bakes in the bare token 'RESOLVES_phenomenological', which CAN be quoted out of context; the fragility lives in a SEPARATE verdict_sensitivity field rather than in the headline verdict string. That said, verdict_sensitivity, caveat_BOUND, caveat_tracker_window_FAIL, the global_fit ESTIMATE flag, and machinery_status(OUT_OF_SCOPE) are all present, explicit, and self-incriminating -- the artifact does not hide the weakness. Recommendation: the primary verdict field should read RESOLVES_FRAGILE (or INCONCLUSIVE) so a bare 'RESOLVES' cannot be lifted from verdict_preregistered."
- }
+ },
+ "verdict_of_verification": "SURVIVES_WITH_CAVEATS"
 }
