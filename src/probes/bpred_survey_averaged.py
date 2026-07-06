@@ -66,6 +66,9 @@ ADV = os.path.join(_POUT, "adv_anchored_h0.json")
 DATA = os.path.join(_SRC, "data", "PantheonSH0ES.dat")
 LB_ARTIFACT = os.path.join(_SCIENCE, "free-history-timescape", "probes_out",
                            "modelV_probeR_LB.json")
+# audit sec.3: paper-2 two-sided void-wall contrast budget (cross-repo, portable).
+CONTRAST_BUDGET = os.path.join(_SCIENCE, "free-history-timescape", "probes_out",
+                               "contrast_budget.json")
 TWOMPP = os.path.join(_REPO, "external_data", "twompp_density.npy")
 
 C_KMS = 299792.458
@@ -179,6 +182,69 @@ def E_max_from_fields(f):
     E_max = f["gamma_bar0"] * f["Hv_over_Hbar0"] / f["Hdress_over_Hbar0"] - 1.0
     E_via_id = f["E_dress_void"] + f["gamma_bar_dot"] / f["Hdress_over_Hbar0"]
     return E_max, E_via_id
+
+
+# ---------------------------------------------------------------------------
+# audit sec.3: PHYSICAL void rate from the paper-2 two-sided contrast budget
+# ---------------------------------------------------------------------------
+# The CEILING E_max above uses the model's DERIVED/EMPTY-void rate Hv_over_Hbar0 (=1.273 on
+# LA, a sec.2 void-contrast h_v=H_v/H_bg=1.273, i.e. a void deeper than lensing measures).
+# The PHYSICAL row CAPS that void rate by sec.2's lensing-measured two-sided void-wall
+# contrast (H_v-H_w)/<H>: substitute the sec.2 spherical-patch void rate h_v=H_v/H_bg for
+# Hv_over_Hbar0 (identifying sec.2's background H_bg with the model's Hbar0 -- the *background*
+# normalization; the model's <H>/Hbar0=1.088 differs only via backreaction), keeping the SAME
+# gamma_bar0, Hdress0 and the SAME survey dilution <phi>_HF. Only the void-scale ceiling changes.
+#
+# Embedded sec.2 fallback (verbatim from ../free-history-timescape/probes_out/contrast_budget.json)
+# so this stays runnable if the paper-2 sibling is absent. h_v = H_v/H_bg spherical-patch void
+# rates; two_sided = (H_v-H_w)/<H> at z=0 they imply.
+SEC2_FALLBACK = {
+    "field_mean_hv_r200": 1.1527073299823296,        # self-consistent field-mean void (r200), delta~-0.45
+    "field_mean_hv_r100": 1.1757957893985875,        # self-consistent field-mean void (r100)
+    "deep_void_center_m0p8_hv": 1.3361087210110663,  # lensing deepest void center delta_m=-0.8
+    "field_mean_two_sided_z0_r200": 0.375,
+    "field_mean_two_sided_z0_r100": 0.40102,
+    "deep_void_center_m0p8_two_sided_z0": 0.50223,   # delta_m=-0.8 void x field-effective wall
+    "required_two_sided_z0_central": 0.47409,
+    "empty_void_ceiling_hv": 1.5,                    # EdS empty-void h_v ceiling (sec.2 reference)
+}
+
+
+def load_sec2_contrast():
+    """sec.2 physical void rates h_v=H_v/H_bg + two-sided contrasts (H_v-H_w)/<H>: prefer the
+    paper-2 contrast_budget.json sibling (portable __file__-derived path), else the embedded
+    fallback so this artifact stays runnable stand-alone."""
+    if os.path.exists(CONTRAST_BUDGET):
+        try:
+            cb = json.load(open(CONTRAST_BUDGET))
+            fa = cb["available_field_averaged"]
+            grid = {round(float(g["delta_void_central"]), 1): g for g in cb["available_grid"]}
+            g08 = grid[-0.8]
+            blk = dict(
+                field_mean_hv_r200=float(fa["r200"]["hv"]),
+                field_mean_hv_r100=float(fa["r100"]["hv"]),
+                deep_void_center_m0p8_hv=float(g08["h_v_central"]),
+                field_mean_two_sided_z0_r200=float(fa["r200"]["excess_z0"]),
+                field_mean_two_sided_z0_r100=float(fa["r100"]["excess_z0"]),
+                deep_void_center_m0p8_two_sided_z0=float(g08["wall_effective"]["excess_z0"]),
+                required_two_sided_z0_central=float(cb["required"]["central"][0]),
+                empty_void_ceiling_hv=float(cb["spherical_model"]["empty_void_ceiling_hv_over_bg"]),
+            )
+            blk["_source"] = "sibling_artifact:" + os.path.relpath(CONTRAST_BUDGET, _REPO)
+            return blk
+        except Exception as e:  # pragma: no cover
+            warnings.warn(f"contrast_budget unreadable ({e!r}); using embedded sec.2 fallback")
+    blk = dict(SEC2_FALLBACK)
+    blk["_source"] = "embedded_fallback"
+    return blk
+
+
+def E_max_physical(fields, h_v_phys):
+    """Void-scale maximum with the void rate CAPPED by sec.2's physical h_v=H_v/H_bg:
+    E_max_phys = gamma_bar0 * h_v_phys / Hdress0 - 1, substituting the lensing-physical void
+    rate for the model's DERIVED Hv_over_Hbar0 while keeping gamma_bar0, Hdress0 from the SAME
+    free-history solution as the ceiling."""
+    return fields["gamma_bar0"] * float(h_v_phys) / fields["Hdress_over_Hbar0"] - 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +645,82 @@ def main():
     )
 
     # =====================================================================
+    # audit sec.3: PHYSICAL-void sensitivity row (the CEILING row above is UNCHANGED).
+    # Cap the void rate H_v by sec.2's LENSING-measured two-sided contrast band instead of
+    # the model's derived/empty-void maximum. b_pred_physical = E_max_physical * <phi>_HF with
+    # the SAME survey dilution <phi>_HF (phi_h) -- only the void-scale ceiling changes.
+    # PRIMARY: the self-consistent field-mean void (h_v = field-averaged value). Band spans the
+    # sec.2 modeling range: field-mean (conservative) -> deep-void-center delta_m=-0.8 (generous).
+    # nsigma filled in below once b_req + sigma are computed. Ceiling/physical PAIRING is the point.
+    # =====================================================================
+    sec2 = load_sec2_contrast()
+    phi_hf_used = phi_h                          # same survey dilution as the ceiling row
+    hv_fm_r200 = sec2["field_mean_hv_r200"]      # conservative field-mean anchor
+    hv_fm_r100 = sec2["field_mean_hv_r100"]
+    hv_fm_mid = 0.5 * (hv_fm_r200 + hv_fm_r100)  # field-mean central (PRIMARY)
+    hv_deep = sec2["deep_void_center_m0p8_hv"]   # generous deep-void-center delta_m=-0.8
+
+    E_phys_fm_r200 = E_max_physical(fields_LA, hv_fm_r200)
+    E_phys_fm_r100 = E_max_physical(fields_LA, hv_fm_r100)
+    E_phys_fm_mid = E_max_physical(fields_LA, hv_fm_mid)
+    E_phys_deep = E_max_physical(fields_LA, hv_deep)
+
+    b_phys_fm_r200 = E_phys_fm_r200 * phi_hf_used
+    b_phys_fm_r100 = E_phys_fm_r100 * phi_hf_used
+    b_phys_fm_mid = E_phys_fm_mid * phi_hf_used   # PRIMARY central b_pred_physical
+    b_phys_deep = E_phys_deep * phi_hf_used
+
+    # band spans conservative field-mean (lowest realistic b_pred) -> generous deep-void
+    E_phys_band = [E_phys_fm_r200, E_phys_deep]
+    b_phys_band = [b_phys_fm_r200, b_phys_deep]
+
+    out["b_pred_survey_PHYSICAL"] = dict(
+        role="LENSING-PHYSICAL sensitivity row (audit sec.3). The CEILING row (E_max=%.5f, "
+             "b_pred_survey=%.5f) above is UNCHANGED -- the ceiling/physical PAIRING is the point."
+             % (E_max_LA, b_central),
+        formula="E_max_physical = gamma_bar0 * h_v_phys / Hdress0 - 1 ; b_pred_physical = "
+                "E_max_physical * <phi>_HF. h_v_phys = sec.2 spherical-patch void rate H_v/H_bg "
+                "(paper-2 contrast_budget.json), substituted for the model's DERIVED Hv_over_Hbar0 "
+                "(=%.5f). gamma_bar0=%.5f, Hdress0=%.5f, <phi>_HF=%.6f held FIXED from the ceiling "
+                "row (survey dilution unchanged)."
+                % (fields_LA["Hv_over_Hbar0"], fields_LA["gamma_bar0"],
+                   fields_LA["Hdress_over_Hbar0"], phi_hf_used),
+        sec2_source=sec2["_source"],
+        physical_contrast_used=dict(
+            two_sided_contrast_definition="(H_v-H_w)/<H> at z=0 (paper-2 audit sec.2)",
+            field_mean_two_sided_z0_band=[sec2["field_mean_two_sided_z0_r200"],
+                                          sec2["field_mean_two_sided_z0_r100"]],
+            deep_void_center_m0p8_two_sided_z0=sec2["deep_void_center_m0p8_two_sided_z0"],
+            required_two_sided_z0_central=sec2["required_two_sided_z0_central"],
+            empty_void_ceiling_hv=sec2["empty_void_ceiling_hv"],
+            note="sec.2 two-sided budget: self-consistent field-mean 0.375-0.401 (r200-r100), deep "
+                 "delta_m=-0.8 void x field-effective wall 0.502; required 0.474; strike MARGINAL. "
+                 "The PHYSICAL row caps the void RATE h_v by these measured contents; the model's "
+                 "derived void rate h_v=%.5f is deeper than the field-mean (h_v~%.3f-%.3f), so the "
+                 "field-mean cap REDUCES E_max and STRENGTHENS the FAILS."
+                 % (fields_LA["Hv_over_Hbar0"], hv_fm_r200, hv_fm_r100)),
+        void_anchors=dict(
+            field_mean_r200_conservative=dict(h_v_phys=hv_fm_r200, E_max_physical=E_phys_fm_r200,
+                                              b_pred_physical=b_phys_fm_r200),
+            field_mean_midpoint_PRIMARY=dict(h_v_phys=hv_fm_mid, E_max_physical=E_phys_fm_mid,
+                                             b_pred_physical=b_phys_fm_mid),
+            field_mean_r100=dict(h_v_phys=hv_fm_r100, E_max_physical=E_phys_fm_r100,
+                                 b_pred_physical=b_phys_fm_r100),
+            deep_void_center_m0p8_generous=dict(h_v_phys=hv_deep, E_max_physical=E_phys_deep,
+                                                b_pred_physical=b_phys_deep),
+        ),
+        E_max_physical_central=E_phys_fm_mid,
+        E_max_physical_band=E_phys_band,
+        E_max_physical_band_note="[field-mean r200 conservative, deep-void delta_m=-0.8 generous]",
+        b_pred_physical_central=b_phys_fm_mid,
+        b_pred_physical_band=b_phys_band,
+        b_pred_physical_band_note="[field-mean r200 conservative, deep-void delta_m=-0.8 generous]",
+        ceiling_reference=dict(E_max_ceiling=E_max_LA, b_pred_survey_ceiling=b_central,
+                               note="derived/EMPTY-void maximum -- UNCHANGED by this row."),
+        # nsigma_physical_* + verdict_* filled in after b_req + sigma are computed (see below).
+    )
+
+    # =====================================================================
     # systematic band: sweep form x (r_void, r_hom) x z-choice x lapse
     # =====================================================================
     forms = ["raised_cosine", "linear", "smootherstep", "cosine_no_plateau"]
@@ -720,6 +862,70 @@ def main():
 
     v_central = verdict_of(nsigma)        # pre-registered, sigma_total (phi-inflated)
     v_meas = verdict_of(nsigma_meas)      # measurement-only sigma (excludes the phi band)
+
+    # ---- audit sec.3: fill the PHYSICAL row's nsigma / verdict ------------------------
+    # Reuse the ceiling's sigma budget (measurement-only + total). It is computed at the LARGER
+    # ceiling E_max, so it CONSERVATIVELY over-estimates the physical row's systematics (sigma_phi
+    # and sigma_lapse both scale ~ with E_max) -> an upper bound on sigma -> a lower bound on the
+    # strengthening. Direction-preserving: b_pred_physical < b_pred_ceiling -> |diff| grows ->
+    # nsigma grows -> the FAILS only strengthens.
+    def _phys_ns(bp):
+        d = float(bp) - b_req
+        nm = float(abs(d) / sigma_meas_only)
+        nt = float(abs(d) / sigma_total)
+        return dict(b_pred_physical=float(bp), diff_vs_b_req=d,
+                    nsigma_measurement_only=nm, verdict_measurement_only=verdict_of(nm),
+                    nsigma_preregistered=nt, verdict_preregistered=verdict_of(nt))
+    ph = out["b_pred_survey_PHYSICAL"]
+    ns_central = _phys_ns(b_phys_fm_mid)
+    ns_fm_r200 = _phys_ns(b_phys_fm_r200)
+    ns_fm_r100 = _phys_ns(b_phys_fm_r100)
+    ns_deep = _phys_ns(b_phys_deep)
+    # FALSIFIER: even the GENEROUS deep-void edge must under-predict b_req; report loudly if not.
+    deep_reaches_breq = bool(b_phys_deep >= b_req)
+    ph["nsigma_physical"] = dict(
+        sigma_measurement_only=sigma_meas_only, sigma_total=sigma_total,
+        sigma_note="ceiling sigma budget reused (measurement-only + total); computed at the larger "
+                   "ceiling E_max so it CONSERVATIVELY over-estimates the physical row's systematics "
+                   "(sigma_phi, sigma_lapse ~ E_max) -> upper-bound sigma -> lower-bound strengthening.",
+        central_field_mean=ns_central,
+        field_mean_r200_conservative=ns_fm_r200,
+        field_mean_r100=ns_fm_r100,
+        deep_void_center_m0p8_generous=ns_deep,
+        ceiling_comparison=dict(
+            nsigma_measurement_only_ceiling=nsigma_meas,
+            nsigma_preregistered_ceiling=nsigma,
+            note="ceiling: meas-only nsigma=%.3f (%s), pre-reg nsigma=%.3f (%s)."
+                 % (nsigma_meas, v_meas, nsigma, v_central)),
+    )
+    ph["verdict_physical"] = dict(
+        verdict_measurement_only=ns_central["verdict_measurement_only"],
+        verdict_preregistered=ns_central["verdict_preregistered"],
+        whole_band_measurement_verdict=("FAILS" if all(
+            n["verdict_measurement_only"] == "FAILS"
+            for n in (ns_fm_r200, ns_fm_r100, ns_deep, ns_central)) else "MIXED"),
+        deep_void_generous_reaches_b_req=deep_reaches_breq,
+        direction_preserving="FAILS only strengthens",
+        headline=("LENSING-PHYSICAL row: capping the void rate by sec.2's two-sided contrast gives "
+                  "b_pred_physical central %.5f (field-mean, band [%.5f,%.5f] conservative->generous) "
+                  "vs ceiling %.5f vs b_req %.5f. Measurement-only nsigma central=%.2f (%s), "
+                  "STRENGTHENED from the ceiling's %.2f; the ENTIRE physical band FAILS on "
+                  "measurement-only sigma (generous deep-void edge %.2f sigma). The pre-registered "
+                  "nsigma stays %s (softened only by the wide phi theoretical systematic). Even the "
+                  "GENEROUS deep-void delta_m=-0.8 edge (b_pred %.5f) UNDER-predicts b_req by %.1fx "
+                  "-- dilution dominates; the falsifier (generous >= b_req) is NOT tripped."
+                  % (b_phys_fm_mid, b_phys_fm_r200, b_phys_deep, b_central, b_req,
+                     ns_central["nsigma_measurement_only"], ns_central["verdict_measurement_only"],
+                     nsigma_meas, ns_deep["nsigma_measurement_only"],
+                     ns_central["verdict_preregistered"], b_phys_deep,
+                     (b_req / b_phys_deep) if b_phys_deep else float("inf"))),
+        note="Ceiling row (E_max=%.5f, b_pred_survey=%.5f) UNCHANGED; this is the lensing-physical "
+             "sensitivity row that pairs with it." % (E_max_LA, b_central),
+    )
+    if deep_reaches_breq:  # pragma: no cover -- falsifier tripwire (dilution should preclude this)
+        ph["verdict_physical"]["FALSIFIER_TRIPPED"] = (
+            "!! GENEROUS deep-void physical b_pred %.5f REACHED b_req %.5f -- REPORT LOUDLY."
+            % (b_phys_deep, b_req))
 
     # ONE-SIDED envelope. The ENTIRE admissible phi band [b_env_lo, b_env_hi] lies BELOW
     # b_req, so the mechanism under-predicts for EVERY admissible phi. We therefore do NOT
@@ -869,6 +1075,20 @@ def main():
     print(f"  VERDICT robust = {v_robust}   pre-registered = {primary_token}")
     print(f"  dilution: E_max {E_max_LA:.4f} -> b_pred_survey {b_central:.4f} "
           f"({(E_max_LA/b_central) if b_central else float('inf'):.1f}x)")
+    print("=== audit sec.3: PHYSICAL-void row (ceiling row UNCHANGED) ===")
+    print(f"  CEILING: E_max={E_max_LA:.5f}  b_pred={b_central:.5f}  (derived/empty-void max)")
+    print(f"  PHYSICAL field-mean h_v: r200={hv_fm_r200:.4f} r100={hv_fm_r100:.4f} "
+          f"deep(-0.8)={hv_deep:.4f}  (sec.2 {sec2['_source']})")
+    print(f"  E_max_physical central(field-mean)={E_phys_fm_mid:.5f}  band[{E_phys_fm_r200:.5f},"
+          f"{E_phys_deep:.5f}]")
+    print(f"  b_pred_physical central={b_phys_fm_mid:.5f}  band[{b_phys_fm_r200:.5f},"
+          f"{b_phys_deep:.5f}]  (vs ceiling {b_central:.5f}, b_req {b_req:.5f})")
+    print(f"  nsigma_physical central: meas-only={ns_central['nsigma_measurement_only']:.3f}"
+          f"({ns_central['verdict_measurement_only']}, ceiling {nsigma_meas:.3f})  "
+          f"pre-reg={ns_central['nsigma_preregistered']:.3f}({ns_central['verdict_preregistered']})")
+    print(f"  whole physical band meas-only verdict = "
+          f"{ph['verdict_physical']['whole_band_measurement_verdict']}; generous deep-void "
+          f"reaches b_req? {deep_reaches_breq}")
     print(f"wrote {OUT}")
 
 

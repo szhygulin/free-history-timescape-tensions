@@ -29,14 +29,28 @@
   "b_pred_differential_REJECTED": 0.310485376969687,
   "physics": "SH0ES M_B is fixed by GEOMETRIC Cepheid distances (parallax/maser/DEB), expansion-rate-independent -> unbiased; so only the HF SNe's local apparent rate biases the inferred H0. Ladder H0 = Hdress*(1+E_max*<phi>_HF). Calibrator apparent rate does NOT enter -> the differential is physically wrong. b_req is a fractional scale ratio (bare); g_dress cancels so bare==dressed fractional excess -> b_pred and b_req are the same quantity, comparable."
  },
+ "physical_sensitivity_recompute": {
+  "sec2_source": "sibling_contrast_budget",
+  "h_v_field_mean_midpoint": 1.1642515596904586,
+  "h_v_deep_void_m0p8": 1.3361087210110663,
+  "E_max_physical_central": 0.2221116816312838,
+  "b_pred_physical_central": 0.01584618444482631,
+  "b_pred_physical_band": [
+   0.014981649936166257,
+   0.028716375897912337
+  ],
+  "b_pred_physical_band_note": "[field-mean r200 conservative, deep-void delta_m=-0.8 generous]",
+  "ceiling_b_pred_survey": 0.02400685869293041,
+  "physics": "Cap the void rate H_v by sec.2's two-sided lensing contrast: field-mean primary b_pred 0.01585 < ceiling 0.02401 < b_req -> FAILS STRENGTHENS; even the generous deep-void -0.8 edge 0.02872 under-predicts b_req (dilution dominates)."
+ },
  "verdict": {
   "b_req": 0.08416615584147968,
   "b_pred_survey": 0.02400685869293041,
   "diff": -0.06015929714854927,
-  "sigma_measurement_only": 0.017565743807006512,
-  "sigma_total": 0.03964413871420341,
-  "nsigma_measurement_only": 3.4248078424412243,
-  "nsigma_total": 1.5174827628931649,
+  "sigma_measurement_only": 0.014451051686491075,
+  "sigma_total": 0.03836580865488502,
+  "nsigma_measurement_only": 4.162970173637018,
+  "nsigma_total": 1.5680445495025253,
   "band_max_below_breq": true,
   "measurement_verdict": "FAILS",
   "preregistered_verdict": "PARTIAL",
@@ -49,7 +63,8 @@
   "E_max_LB": true,
   "mean_phi_hf": true,
   "b_pred_survey": true,
-  "nsigma_meas": true
+  "nsigma_meas": true,
+  "b_pred_physical": true
  },
  "overall": "SURVIVES",
  "verdict_of_verification": "SURVIVES"

@@ -157,6 +157,112 @@
   },
   "conventions": "LA E_max, raised_cosine phi, r_void=30, r_hom=100 h^-1 Mpc, zCMB."
  },
+ "b_pred_survey_PHYSICAL": {
+  "role": "LENSING-PHYSICAL sensitivity row (audit sec.3). The CEILING row (E_max=0.33650, b_pred_survey=0.02401) above is UNCHANGED -- the ceiling/physical PAIRING is the point.",
+  "formula": "E_max_physical = gamma_bar0 * h_v_phys / Hdress0 - 1 ; b_pred_physical = E_max_physical * <phi>_HF. h_v_phys = sec.2 spherical-patch void rate H_v/H_bg (paper-2 contrast_budget.json), substituted for the model's DERIVED Hv_over_Hbar0 (=1.27322). gamma_bar0=1.32007, Hdress0=1.25757, <phi>_HF=0.071343 held FIXED from the ceiling row (survey dilution unchanged).",
+  "sec2_source": "sibling_artifact:../free-history-timescape/probes_out/contrast_budget.json",
+  "physical_contrast_used": {
+   "two_sided_contrast_definition": "(H_v-H_w)/<H> at z=0 (paper-2 audit sec.2)",
+   "field_mean_two_sided_z0_band": [
+    0.375,
+    0.40102
+   ],
+   "deep_void_center_m0p8_two_sided_z0": 0.50223,
+   "required_two_sided_z0_central": 0.47409,
+   "empty_void_ceiling_hv": 1.5,
+   "note": "sec.2 two-sided budget: self-consistent field-mean 0.375-0.401 (r200-r100), deep delta_m=-0.8 void x field-effective wall 0.502; required 0.474; strike MARGINAL. The PHYSICAL row caps the void RATE h_v by these measured contents; the model's derived void rate h_v=1.27322 is deeper than the field-mean (h_v~1.153-1.176), so the field-mean cap REDUCES E_max and STRENGTHENS the FAILS."
+  },
+  "void_anchors": {
+   "field_mean_r200_conservative": {
+    "h_v_phys": 1.1527073299823296,
+    "E_max_physical": 0.20999373524391518,
+    "b_pred_physical": 0.014981649936166257
+   },
+   "field_mean_midpoint_PRIMARY": {
+    "h_v_phys": 1.1642515596904586,
+    "E_max_physical": 0.2221116816312838,
+    "b_pred_physical": 0.01584618444482631
+   },
+   "field_mean_r100": {
+    "h_v_phys": 1.1757957893985875,
+    "E_max_physical": 0.23422962801865244,
+    "b_pred_physical": 0.016710718953486362
+   },
+   "deep_void_center_m0p8_generous": {
+    "h_v_phys": 1.3361087210110663,
+    "E_max_physical": 0.40250967437930063,
+    "b_pred_physical": 0.028716375897912337
+   }
+  },
+  "E_max_physical_central": 0.2221116816312838,
+  "E_max_physical_band": [
+   0.20999373524391518,
+   0.40250967437930063
+  ],
+  "E_max_physical_band_note": "[field-mean r200 conservative, deep-void delta_m=-0.8 generous]",
+  "b_pred_physical_central": 0.01584618444482631,
+  "b_pred_physical_band": [
+   0.014981649936166257,
+   0.028716375897912337
+  ],
+  "b_pred_physical_band_note": "[field-mean r200 conservative, deep-void delta_m=-0.8 generous]",
+  "ceiling_reference": {
+   "E_max_ceiling": 0.3364976454450088,
+   "b_pred_survey_ceiling": 0.02400685869293041,
+   "note": "derived/EMPTY-void maximum -- UNCHANGED by this row."
+  },
+  "nsigma_physical": {
+   "sigma_measurement_only": 0.014451051686491075,
+   "sigma_total": 0.03836580865488502,
+   "sigma_note": "ceiling sigma budget reused (measurement-only + total); computed at the larger ceiling E_max so it CONSERVATIVELY over-estimates the physical row's systematics (sigma_phi, sigma_lapse ~ E_max) -> upper-bound sigma -> lower-bound strengthening.",
+   "central_field_mean": {
+    "b_pred_physical": 0.01584618444482631,
+    "diff_vs_b_req": -0.06831997139665337,
+    "nsigma_measurement_only": 4.727681616454204,
+    "verdict_measurement_only": "FAILS",
+    "nsigma_preregistered": 1.7807515022351643,
+    "verdict_preregistered": "PARTIAL"
+   },
+   "field_mean_r200_conservative": {
+    "b_pred_physical": 0.014981649936166257,
+    "diff_vs_b_req": -0.06918450590531343,
+    "nsigma_measurement_only": 4.78750664008679,
+    "verdict_measurement_only": "FAILS",
+    "nsigma_preregistered": 1.8032854859819132,
+    "verdict_preregistered": "PARTIAL"
+   },
+   "field_mean_r100": {
+    "b_pred_physical": 0.016710718953486362,
+    "diff_vs_b_req": -0.06745543688799333,
+    "nsigma_measurement_only": 4.667856592821618,
+    "verdict_measurement_only": "FAILS",
+    "nsigma_preregistered": 1.7582175184884157,
+    "verdict_preregistered": "PARTIAL"
+   },
+   "deep_void_center_m0p8_generous": {
+    "b_pred_physical": 0.028716375897912337,
+    "diff_vs_b_req": -0.05544977994356735,
+    "nsigma_measurement_only": 3.8370757469092798,
+    "verdict_measurement_only": "FAILS",
+    "nsigma_preregistered": 1.4452915730868368,
+    "verdict_preregistered": "PARTIAL"
+   },
+   "ceiling_comparison": {
+    "nsigma_measurement_only_ceiling": 4.162970173637018,
+    "nsigma_preregistered_ceiling": 1.5680445495025253,
+    "note": "ceiling: meas-only nsigma=4.163 (FAILS), pre-reg nsigma=1.568 (PARTIAL)."
+   }
+  },
+  "verdict_physical": {
+   "verdict_measurement_only": "FAILS",
+   "verdict_preregistered": "PARTIAL",
+   "whole_band_measurement_verdict": "FAILS",
+   "deep_void_generous_reaches_b_req": false,
+   "direction_preserving": "FAILS only strengthens",
+   "headline": "LENSING-PHYSICAL row: capping the void rate by sec.2's two-sided contrast gives b_pred_physical central 0.01585 (field-mean, band [0.01498,0.02872] conservative->generous) vs ceiling 0.02401 vs b_req 0.08417. Measurement-only nsigma central=4.73 (FAILS), STRENGTHENED from the ceiling's 4.16; the ENTIRE physical band FAILS on measurement-only sigma (generous deep-void edge 3.84 sigma). The pre-registered nsigma stays PARTIAL (softened only by the wide phi theoretical systematic). Even the GENEROUS deep-void delta_m=-0.8 edge (b_pred 0.02872) UNDER-predicts b_req by 2.9x -- dilution dominates; the falsifier (generous >= b_req) is NOT tripped.",
+   "note": "Ceiling row (E_max=0.33650, b_pred_survey=0.02401) UNCHANGED; this is the lensing-physical sensitivity row that pairs with it."
+  }
+ },
  "systematic_band": {
   "phi_shape_band": {
    "lo": 0.0009294409956442243,

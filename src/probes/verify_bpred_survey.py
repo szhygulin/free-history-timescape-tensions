@@ -84,6 +84,39 @@ out["crux_definition"] = dict(
              "b_req is a fractional scale ratio (bare); g_dress cancels so bare==dressed "
              "fractional excess -> b_pred and b_req are the same quantity, comparable."))
 
+# ---- audit sec.3: PHYSICAL-void row independent recompute -------------------------
+# b_pred_physical = (gamma_bar0 * h_v_phys / Hdress0 - 1) * <phi>_HF, with h_v_phys the sec.2
+# lensing-measured spherical-patch void rate H_v/H_bg (paper-2 contrast_budget.json) substituted
+# for the model's DERIVED Hv_over_Hbar0. Same gb0, Hd0, <phi>_HF as the ceiling -> only the
+# void-scale ceiling changes. PRIMARY = self-consistent field-mean void; band -> deep-void -0.8.
+SEC2_FB = dict(hv_fm_r200=1.1527073299823296, hv_fm_r100=1.1757957893985875,
+               hv_deep_m0p8=1.3361087210110663)
+try:
+    _cb = json.load(open(os.path.join(P2, "probes_out", "contrast_budget.json")))
+    _fa = _cb["available_field_averaged"]
+    _grid = {round(float(g["delta_void_central"]), 1): g for g in _cb["available_grid"]}
+    hv_fm_r200 = float(_fa["r200"]["hv"]); hv_fm_r100 = float(_fa["r100"]["hv"])
+    hv_deep = float(_grid[-0.8]["h_v_central"]); sec2_src = "sibling_contrast_budget"
+except Exception:
+    hv_fm_r200, hv_fm_r100, hv_deep = SEC2_FB["hv_fm_r200"], SEC2_FB["hv_fm_r100"], SEC2_FB["hv_deep_m0p8"]
+    sec2_src = "embedded_fallback"
+def E_max_phys(h_v): return gb0 * h_v / Hd0 - 1.0
+hv_fm_mid = 0.5 * (hv_fm_r200 + hv_fm_r100)
+b_phys_central = E_max_phys(hv_fm_mid) * mean_phi_hf                 # PRIMARY field-mean central
+b_phys_band = [E_max_phys(hv_fm_r200) * mean_phi_hf, E_max_phys(hv_deep) * mean_phi_hf]
+out["physical_sensitivity_recompute"] = dict(
+    sec2_source=sec2_src,
+    h_v_field_mean_midpoint=hv_fm_mid, h_v_deep_void_m0p8=hv_deep,
+    E_max_physical_central=E_max_phys(hv_fm_mid),
+    b_pred_physical_central=b_phys_central,
+    b_pred_physical_band=b_phys_band,
+    b_pred_physical_band_note="[field-mean r200 conservative, deep-void delta_m=-0.8 generous]",
+    ceiling_b_pred_survey=b_pred_survey,
+    physics=("Cap the void rate H_v by sec.2's two-sided lensing contrast: field-mean primary "
+             "b_pred %.5f < ceiling %.5f < b_req -> FAILS STRENGTHENS; even the generous deep-void "
+             "-0.8 edge %.5f under-predicts b_req (dilution dominates)."
+             % (b_phys_central, b_pred_survey, b_phys_band[1])))
+
 # ---- verdict ---------------------------------------------------------------------
 phaseF = json.load(open(os.path.join(ROOT, "probes_out", "phaseF_freshH0.json")))
 b_req = 0.08416615584147968  # = Hbar0_anch/Hbar0_glob - 1 (recomputed below)
@@ -92,7 +125,9 @@ try:
     b_req = float(dle)
 except Exception:
     pass
-sig_anch, sig_glob, sig_lapse = 0.013699199232349347, 0.010, 0.004570262124406728
+# sig_glob = joint SN+BAO+CMB chi2 curvature vs alpha (fable-review fix; CMB acoustic-scale
+# precision), replacing the earlier 0.010 ESTIMATE -- matches bpred_survey_averaged.json.
+sig_anch, sig_glob, sig_lapse = 0.013699199232349347, 0.0005268200378202213, 0.004570262124406728
 sig_phi = 0.03554015164426868
 sig_meas = float(np.hypot(np.hypot(sig_anch, sig_glob), sig_lapse))
 sig_tot = float(np.hypot(sig_meas, sig_phi))
@@ -117,6 +152,7 @@ checks = {
     "mean_phi_hf": abs(mean_phi_hf - art["b_pred_survey"]["phi_hf_mean"]) < 1e-6,
     "b_pred_survey": abs(b_pred_survey - art["b_pred_survey"]["b_pred_survey_central"]) < 1e-6,
     "nsigma_meas": abs(abs(diff)/sig_meas - art["nsigma_measurement_only"]) < 1e-6,
+    "b_pred_physical": abs(b_phys_central - art["b_pred_survey_PHYSICAL"]["b_pred_physical_central"]) < 1e-6,
 }
 out["reproduces_artifact"] = checks
 out["overall"] = ("SURVIVES" if all(checks.values()) and out["gate_a"]["PASS"]
