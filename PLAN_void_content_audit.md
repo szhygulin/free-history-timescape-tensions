@@ -22,6 +22,18 @@ the next-wave work order; execution stops at the WP-B Stage-0 gate for user revi
 | WP-H2′ b_pred = 2.4% FAILS (paper 3) | E_max uses the derived H_v ⇒ effectively the empty-void **maximum** | b_pred only *decreases* → FAILS strengthens | sensitivity row (§3) |
 | WP-B three-phase plan | empty phases were the base | already amended (A1: CEILING/PHYSICAL) | run per amended plan |
 
+**Dark-matter accounting (for the record; user's follow-up question).** (i) Buchert "dust" =
+*total* pressureless matter — dark matter (~84% of it) plus baryons; the model never
+distinguishes them, so DM is in the equations by construction. (ii) "More dark matter in the
+walls" is not only true, it is the model's own assumption taken to the extreme: Wiltshire's
+two-phase closure puts **100% of the matter in the walls** and leaves voids exactly empty — the
+single most mechanism-favorable configuration, which is what every committed verdict was
+computed against. (iii) Observationally, matter (not light) enters via the bias-calibrated
+2M++/Carrick field (the below-mean fraction is bias-independent; deep thresholds carry the
+declared bias band) and, in this wave, via stacked void lensing — the direct dark-matter
+measurement. (iv) Velocity bias is negligible on these scales: galaxies and dark matter share
+one expansion/velocity field, so galaxy-traced expansion contrasts are matter contrasts.
+
 **Conclusion (the user's question answered): no rerun.** Every verdict was computed at the
 mechanism's mathematical best case (maximal void-wall contrast), which is precisely what a
 refutation should test: if the best case fails, all physical cases fail a fortiori. Real void
@@ -37,25 +49,35 @@ theoretical maximum in an EdS background is H_v/H̄ = 3/2, i.e. excess 0.5 — *
 contrast sits essentially at the physical ceiling**. Can *real* voids, with lensing-measured
 matter contents, supply it?
 
-**Method (analytic/ODE, hours).** Evolve a spherical open-patch (top-hat underdensity) void in
-the standard background for central matter deficits spanning the lensing band
-δ_m ∈ {−0.3, −0.5, −0.8} (typical watershed centrals bracketed by the deepest interiors;
-Clampitt & Jain 2015, DES stacked void lensing as the provenance anchors — cite, and carry a
-±0.1 band). Output the available excess (H_v − H̄)/H̄ (z) per depth; compare against the required
-curve with its Δχ²≤1 band.
+**Method (analytic/ODE, hours; amendment A2 — two-sided contrast, added 2026-07-06 after the
+user's "dark matter sits in the walls" question).** The required quantity is a void-**wall**
+contrast, so the probe must credit both sides of the measured density split — dense walls
+decelerate *below* the model's marginally-flat (EdS) walls and add contrast; crediting only void
+emptiness would understate the mechanism and make the strike attackable:
+- **Void side:** spherical open-patch evolution for central matter deficits spanning the
+  lensing band δ_m ∈ {−0.3, −0.5, −0.8} (stacked void lensing = the *direct dark-matter* probe;
+  Clampitt & Jain 2015, DES; carry ±0.1).
+- **Wall side:** evolve an overdense patch at the *measured* volume-weighted wall density from
+  the bias-calibrated 2M++ field — mass balance over the δ>0 volume at σ₀ = 0.7345 gives
+  δ_m,wall ≈ +0.5…+0.7 (recompute from the field, don't assume; carry the r100/r200 band).
+Output the available contrast (H_v − H_w)/H̄(z) over the void-depth × wall-density grid, same
+normalization on both sides; compare against the required curve with its Δχ²≤1 band.
 
-**Pre-registered expectations and falsifier.** Expected: available ≈ 0.2–0.35 vs required
-≈ 0.45–0.5 → a ×1.5–2.5 physicality shortfall *independent* of the availability (R2) and bias
-(WP-H2′) failures — a third, independent strike, sealing R1's "reconciles" as unphysical.
-Falsifier (report at full volume if hit): if the nonlinear solve shows real-void excess reaching
-the required band within the lensing depths, the strike is withdrawn and the discussion says so.
+**Pre-registered expectations and falsifier.** Crediting the walls raises the available
+contrast relative to a void-only estimate: expected available ≈ 0.25–0.45 vs required
+≈ 0.45–0.5. A shortfall is *expected but not presumed* — this strike is contingent on the solve
+and may come out marginal rather than decisive. Falsifier (report at full volume if hit): if the
+two-sided contrast reaches the required band within the measured densities, the strike is
+withdrawn and the discussion says so. Either way, the availability (R2) and survey-dilution
+(WP-H2′) verdicts are untouched — they do not rest on this probe.
 Artifacts: `probes_out/contrast_budget.json` + adversarial `verify_contrast_budget.json`
 (independent re-solve, different integrator). Paper 2 discussion gets the result; paper 3 §7
 (WP-N) cites it.
 
 ## 3. Sensitivity row — physical-void b_pred (lives in paper 3)
 
-Recompute E_max with H_v capped by §2's available band (instead of the derived/empty maximum):
+Recompute E_max with the void–wall contrast capped by §2's two-sided available band (instead of
+the derived/empty maximum):
 E_max_physical = γ̄₀ H_v^phys / H_dress − 1, then b_pred_physical = E_max_physical · ⟨φ⟩_HF.
 Expected ≈ 1.0–1.7% vs b_req = 8.417% — the FAILS verdict strengthens from 3.4σ toward ~4σ
 (measurement-only). Append as a labeled row to `bpred_survey_averaged.json` (do not overwrite
