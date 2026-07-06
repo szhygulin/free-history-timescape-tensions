@@ -150,6 +150,14 @@ any timescape f_v → 0 early — the fixed below-mean proxy is structurally wro
 Falsifier: no consistent population model tracks f_v^obs within its band → the mechanism dies at
 theory level; that close-out is a result, not a failure of the paper.
 
+**Execution plan: [`PLAN_WPB_threephase.md`](PLAN_WPB_threephase.md)** (pre-registered
+2026-07-06, post-double-refutation): Stage-0 Q-budget pre-gate → Stage-1 dynamically consistent
+three-phase solve (walls + measured shallow + measured deep void phases, constants fit to
+structure data only, k=0 geometry prediction vs the BIC bar). Includes the total-f_v collapse
+lemma showing all *kinematic* multi-phase variants are already covered by paper 2's forced-fit
+verdict — only the dynamical route remains. Ceiling: success cannot reopen the WP-H2′ tension
+verdict (population-independent dilution); it bears only on the dark-energy-free geometry claim.
+
 ## 7. WP-N — tensions the model itself introduces
 
 The README's fourth bullet, made concrete: (i) the required-vs-floor shape conflict (paper 2
