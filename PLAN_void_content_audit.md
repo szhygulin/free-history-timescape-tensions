@@ -34,6 +34,20 @@ declared bias band) and, in this wave, via stacked void lensing — the direct d
 measurement. (iv) Velocity bias is negligible on these scales: galaxies and dark matter share
 one expansion/velocity field, so galaxy-traced expansion contrasts are matter contrasts.
 
+**Observational light-cone accounting (user's follow-up: "the far wall of a void is deeper in
+the past").** (i) Evolution across a single void: light-crossing of a D ≈ 50 Mpc/h void is
+≈ 2×10⁸ yr (Δz ≈ 0.017) against the ~1.4×10¹⁰ yr evolution timescale → ≲1% front-to-back
+gradient in depth and < 0.2% in the volume fraction (using the *measured* d ln f_v/dz ≈ 0.09);
+first order cancels by front–back symmetry in stacks and population statistics. Two orders below
+the definitional/bias band already carried — no action beyond this note. (ii) Void
+redshift-space distortion (wall outflows stretch voids ~10–20% along the LOS — the standard void
+systematic) does not enter the primary chain: the z = 0 anchor is the real-space-reconstructed
+2M++ field, the z > 0 route uses the growth *ratio* (the RSD boost cancels to first order), and
+below-mean thresholding is sign-robust. (iii) Light propagating through differentially expanding
+voids is not a systematic here but the tested signal itself: paper 1 Phase 3 bounded it
+per-candle (≤ 0.05 mag RMS, −0.9σ regression null). When the paper tex is written, (i)–(iii) get
+one-line entries in the systematics tables.
+
 **Conclusion (the user's question answered): no rerun.** Every verdict was computed at the
 mechanism's mathematical best case (maximal void-wall contrast), which is precisely what a
 refutation should test: if the best case fails, all physical cases fail a fortiori. Real void
