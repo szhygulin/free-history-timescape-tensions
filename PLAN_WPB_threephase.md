@@ -96,6 +96,22 @@ labeled an approximation, all gates still required.
 z_i ≈ 100, plus the standard profiled nuisances (SN offset, BAO α). **Fit them to the measured
 structure curves only** — f_s(z), f_d(z) with their full bands — never to SN/BAO/CMB.
 
+**Void-content variants (amendment A1, pre-registered before Stage 0 — voids are not empty):**
+Galaxy-traced voids overstate matter emptiness (bias); stacked void *lensing* measures the total
+matter and finds central underdensities δ_m ≈ −0.3…−0.5 for typical watershed voids (deepest
+large-void interiors ≈ −0.8), never the Milne δ = −1 the base model assumes. Since matter inside
+voids slows them, the empty-void configuration is the mechanism's mathematical **best case**.
+Therefore:
+- **CEILING variant** (base plan): empty (Milne) void phases — maximal contrast per unit volume.
+  If the CEILING fails the bar, every physical variant fails *a fortiori* — stop there.
+- **PHYSICAL variant**: void-phase matter content Ω_m^(i) pinned by lensing-calibrated profiles
+  (fixed, not fit). Run only if the CEILING clears the bar.
+- **Stage-0 sensitivity row**: recompute Q_avail with lensing-calibrated depths (expected to
+  shrink it ~2–4×) so the go/no-go states both the ceiling and the physical budget.
+- Consistency note for the write-up: the committed kinematic requirement already demands
+  (H_v−H_w)/H̄₀ ≈ 0.5 at z = 0, which only near-empty voids can supply — real void contents cap
+  the contrast well below this; state it as an independent physicality strike.
+
 **Gates (all must PASS before any cosmology is scored):**
 - **G1** two-phase empty-void limit reproduces the tracker oracle (SN χ² = 1391.545 ± 0.01;
   distances < 1e-6; the non-FLRW dD_M/dz ≠ D_H signature).
