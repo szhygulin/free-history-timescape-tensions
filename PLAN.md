@@ -95,6 +95,22 @@ Four conditions separate a decisive resolution from a worthless one:
 
 - **H-A (fitted structure).** Verify the first pass adversarially; add the LB-lapse variant; DR2
   vintage; compute b_pred (P2) and issue the P3 verdict; z-profile check (P4).
+- **WP-H2′ (scope amendment, 2026-07-06) — the survey-averaged b_pred.** Supersedes §8's
+  out-of-scope line for this one item. Built as a radial apparent-H₀ profile
+  ⟨H⟩(<r) = E_max·φ(r): the void-scale maximum is a pure wall-observer clock conversion
+  E_max = γ̄₀H_v0/H_dress0 − 1 = (3/2)/g_dress(fv0) − 1 on the tracker (gate a reproduces the
+  Wiltshire 17–22% window: 0.171@fv0=0.76, 0.220@fv0=0.695, verified vs arXiv:0909.0749 /
+  0912.5234); small-r ceiling E_max(LA)=0.33650 (gate b — this corrects the Wave-1b b_pred, which
+  mis-identified the *volume-average* excess 0.19480 = E_dress_void as the maximum; the maximum
+  drops the γ̄̇ subtraction, E_max = E_dress_void + γ̄̇/H_dress); large-r → 0 (gate c). The SH0ES
+  ladder bias is b_pred_survey = E_max·⟨φ⟩_HF — only the Hubble-flow SNe carry it (M_B is fixed by
+  *geometric* Cepheid distances, so the calibrator apparent rate does not enter) — giving 0.024, a
+  14× dilution (58% of HF SNe sit past the ~100 h⁻¹Mpc homogeneity scale). **Verdict FAILS**:
+  b_pred_survey under-predicts b_req=0.08417 by 3.5σ (measurement-only); the pre-registered
+  PARTIAL_FRAGILE holds only because the dominant φ-shape *theoretical* systematic inflates σ, and
+  b_pred stays below b_req across the entire systematic band. The dressing mechanism does not
+  produce the required local bias even with the corrected (larger) void-scale maximum. Artifacts
+  `bpred_survey_averaged.json`, verified `verify_bpred_survey.json`.
 - **H-B (catalog-forced structure) — the decisive version.** Re-run the identical pipeline with
   f_v(z) = f_v^obs(z) from paper 2's final Phase D (zero fitted shape parameters). Gated on
   paper 2's R2-final verdict (SUPPLIED or at minimum a derived-mapping band). If paper 2 lands

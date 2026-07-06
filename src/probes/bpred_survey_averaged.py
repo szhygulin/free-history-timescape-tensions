@@ -1,0 +1,726 @@
+#!/usr/bin/env python3
+"""Survey-averaged b_pred via a radial apparent-H0 profile (paper-3 WP-H2', PLAN P2/P3/P4).
+
+THE DECISIVE COMPUTATION. Turns the void-scale apparent-H0 MAXIMUM (E_max) into the
+survey-weighted local Hubble bias the SH0ES ladder actually samples, by averaging a radial
+apparent-H0 excess profile dH(<r)/Hdress = E_max * phi(r) over the SH0ES calibrator +
+Hubble-flow survey geometry, and compares it once to b_req.
+
+WHAT CHANGED FROM THE PRIOR COMMITTED b_pred (bpred_local_excess.json).
+  The prior b_pred used E_dress_void = (Hvoid_app - Hdress)/Hdress with
+  Hvoid_app = gamma_bar0*H_v - gamma_bar_dot. That SUBTRACTS the global dressed-scale-factor
+  term gamma_bar_dot -> the VOLUME-AVERAGE excess (0.19480 on LA). That is NOT the void-scale
+  maximum. The wall-observer void-crossing rate is a PURE clock conversion gamma_bar0*H_v
+  (NO subtraction), so the void-scale MAXIMUM is
+        E_max = gamma_bar0*H_v0/Hdress0 - 1.
+  Reconciliation (exact identity, verified in gate b):
+        E_max = E_dress_void + gamma_bar_dot/Hdress.
+  ON THE TRACKER this reduces to E_max(fv0) = (3/2)/g_dress(fv0) - 1
+        = 3(2+fv0)/(4 fv0^2 + fv0 + 4) - 1,   which reproduces Wiltshire's window (gate a).
+  ON A FREE HISTORY (LA/LB) it does NOT reduce to (3/2)/g_dress -- the ACTUAL solution values
+  gamma_bar0, H_v0, Hdress0 are used (gate b: E_max(LA)=0.33650).
+
+THREE VALIDATION GATES (must PASS before any survey number; PLAN sec 10 discipline):
+  (a) DERIVE the Wiltshire 17-22% window on the tracker: E_max(0.76)=0.171, E_max(0.695)=0.220;
+      down-side wall floor 1-1/g_dress(0.76)=0.219; "75 km/s/Mpc" check 61.7*(1+E_max).
+      Refs: Wiltshire 2009 (arXiv:0909.0749); review (arXiv:0912.5234).
+  (b) small-r ceiling: phi(0)=1 -> dH(<r->0)/Hdress = E_max(LA) = 0.33650.
+  (c) large-r limit: phi(r>=r_hom)=0 -> dH -> 0 (global dressed rate past homogeneity).
+
+RADIAL PROFILE. phi(r): plateau at the void-interior maximum out to the dominant-void scale
+r_void ~ 30 h^-1 Mpc, smooth monotone decline to 0 by the homogeneity scale r_hom ~ 100 h^-1
+Mpc (Wiltshire's radial prescription; e.g. Wiltshire, Smale, Mattsson & Watson 2013,
+arXiv:1201.5371). (r_void, r_hom) and the functional form are DECLARED SYSTEMATICS (Wiltshire's
+values -- NOT fitted); the survey-averaged b_pred's sensitivity to them is the DOMINANT
+systematic band. Optional 2M++ (Carrick+15) cross-check of the homogeneity scale (not a fit).
+
+SURVEY AVERAGING. Each SN -> r_i = c*z_i/100 (h^-1 Mpc; zCMB first-order primary, zHD systematic
+per PLAN P4). Two populations: 77 Cepheid calibrators (z~0.001-0.017, r<~51, inside the bump)
+and the Hubble-flow SNe (z~0.023-0.15, r~69-450, mostly past r_hom). The survey-averaged local
+Hubble bias is the offset between the calibrator-pinned local rate and the HF global rate:
+        b_pred_survey = E_max * ( <phi>_calibrators - <phi>_Hubble-flow ).
+EXPECT strong dilution: ~all HF SNe sit past r_hom (phi->0), so b_pred_survey << E_max.
+
+Writes probes_out/bpred_survey_averaged.json. One number -> one script -> one JSON.
+"""
+import os
+import sys
+import json
+import warnings
+import numpy as np
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_SRC = os.path.abspath(os.path.join(_HERE, ".."))
+_REPO = os.path.dirname(_SRC)                        # .../free-history-timescape-tensions
+_SCIENCE = os.path.dirname(_REPO)                    # .../science
+os.chdir(_SRC)                                       # so fit_timescape's data/ paths resolve
+sys.path.insert(0, _HERE)
+sys.path.insert(0, _SRC)
+import modelv_theory as MV                            # free-history dressed-geometry solver
+
+_POUT = os.path.join(_REPO, "probes_out")
+OUT = os.path.join(_POUT, "bpred_survey_averaged.json")
+PHASEF = os.path.join(_POUT, "phaseF_freshH0.json")
+ADV = os.path.join(_POUT, "adv_anchored_h0.json")
+DATA = os.path.join(_SRC, "data", "PantheonSH0ES.dat")
+LB_ARTIFACT = os.path.join(_SCIENCE, "free-history-timescape", "probes_out",
+                           "modelV_probeR_LB.json")
+TWOMPP = os.path.join(_REPO, "external_data", "twompp_density.npy")
+
+C_KMS = 299792.458
+
+# Probe-R free-history histories (LA winner, LB winner) on the default nodes.
+Z_NODES = [0.0, 0.3, 0.7, 1.3, 2.33]
+FV_NODES_V = [0.64013, 0.53112, 0.39578, 0.27945, 0.19359]     # LA (algebraic) winner
+FV_NODES_LB = [0.58786, 0.49709, 0.38473, 0.2503, 0.12145]     # LB (rate_ratio) winner
+
+# LB two-scale fields embedded fallback (verbatim from 1b-A modelV_probeR_LB.json two_scale_z0_LB);
+# the paper-3 rate_ratio solver diverges on the LB nodes, so LB is READ, not recomputed.
+LB_FALLBACK = {
+    "fv0": 0.5878612293793102, "Hv_over_Hbar0": 1.1983344389865043,
+    "Hbar_over_Hbar0": 1.022971258376305,
+    "gamma_bar0_LB": 1.3236247572964668, "gamma_bar_dot_LB": 0.04140610935253841,
+    "Hdress_over_Hbar0": 1.3126239742370596,
+    "E_dress_void_PRIMARY": 0.17683285688029907,
+}
+
+# Wiltshire radial prescription anchors (DECLARED SYSTEMATICS -- not fitted).
+R_VOID_CENTRAL = 30.0      # dominant-void scale [h^-1 Mpc]
+R_HOM_CENTRAL = 100.0      # statistical-homogeneity scale [h^-1 Mpc]
+R_VOID_RANGE = (20.0, 40.0)
+R_HOM_RANGE = (80.0, 120.0)
+PHI_FORM_CENTRAL = "raised_cosine"
+
+# Wiltshire (2009) tracker window endpoints (gate a targets, 3 sig figs).
+WILT_TARGET_076 = 0.171
+WILT_TARGET_0695 = 0.220
+WILT_DOWN_FLOOR_076 = 0.219   # 1 - 1/g_dress(0.76): "present epoch variance 22%"
+WILT_DRESSED_GLOBAL_H0 = 61.7 # km/s/Mpc, dressed global rate for the "75 km/s/Mpc" check
+
+
+# ---------------------------------------------------------------------------
+# tracker algebraic identity (gate a)
+# ---------------------------------------------------------------------------
+def g_dress(fv0):
+    fv0 = float(fv0)
+    return (4.0 * fv0 ** 2 + fv0 + 4.0) / (2.0 * (2.0 + fv0))
+
+
+def E_max_tracker(fv0):
+    """Void-scale maximum on the tracker: (3/2)/g_dress - 1 = 3(2+fv0)/(4fv0^2+fv0+4) - 1."""
+    fv0 = float(fv0)
+    return 3.0 * (2.0 + fv0) / (4.0 * fv0 ** 2 + fv0 + 4.0) - 1.0
+
+
+# ---------------------------------------------------------------------------
+# free-history two-scale decomposition at z=0 (recompute LA; read LB)
+# ---------------------------------------------------------------------------
+def two_scale_at_z0(sol):
+    """Exact two-scale decomposition at z=0 for the algebraic lapse (units of Hbar0).
+
+    Returns gamma_bar0, H_v0, Hbar0, Hdress0, gamma_bar_dot, E_dress_void, E_max.
+    Reproduces bpred_local_excess.two_scale_at_z0 / modelv_probeR.derived_curves at z=0.
+    """
+    z, tau, fv = sol.z, sol.tau, sol.fv
+    fv0 = float(sol.fv0)
+    tau0 = float(np.interp(0.0, z, tau))
+    dz_dtau = np.gradient(z, tau)
+    dfv_dz = np.gradient(fv, z)
+    fvp = float(np.interp(0.0, z, dfv_dz * dz_dtau))            # df_v/dtau (>0)
+    one_m = max(1.0 - fv0, 1e-9)
+
+    Hw = 2.0 / (3.0 * tau0)                                     # H_w/Hbar0
+    dHvw = fvp / (3.0 * fv0 * one_m)                            # (H_v - H_w)/Hbar0
+    Hbar = Hw + fvp / (3.0 * one_m)                            # <H>/Hbar0
+    Hv = Hw + dHvw                                             # H_v/Hbar0
+
+    gam = (2.0 + fv0) / 2.0                                     # algebraic lapse
+    gamp = fvp / 2.0                                            # dgamma_bar/dtau
+    Hdress = gam * Hbar - gamp                                 # dressed present rate = Hd(0)
+    Hvoid_app = gam * Hv - gamp                                # dressed void rate (subtracted term)
+
+    E_dress_void = (Hvoid_app - Hdress) / Hdress               # VOLUME-AVERAGE excess (prior b_pred)
+    E_max = gam * Hv / Hdress - 1.0                           # VOID-SCALE MAXIMUM (pure clock conv.)
+    return dict(fv0=fv0, gamma_bar0=gam, gamma_bar_dot=gamp,
+                Hv_over_Hbar0=Hv, Hbar_over_Hbar0=Hbar, Hdress_over_Hbar0=Hdress,
+                Hvoid_app_over_Hbar0=Hvoid_app,
+                E_dress_void=E_dress_void, E_max=E_max)
+
+
+def load_lb_fields():
+    """LB two-scale fields: prefer the live 1b-A artifact, else the embedded fallback."""
+    if os.path.exists(LB_ARTIFACT):
+        try:
+            art = json.load(open(LB_ARTIFACT))
+            b = art["two_scale_z0_LB"]
+            blk = dict(fv0=float(b["fv0"]), Hv_over_Hbar0=float(b["Hv_over_Hbar0"]),
+                       Hbar_over_Hbar0=float(b["Hbar_over_Hbar0"]),
+                       gamma_bar0=float(b["gamma_bar0_LB"]),
+                       gamma_bar_dot=float(b["gamma_bar_dot_LB"]),
+                       Hdress_over_Hbar0=float(b["Hdress_over_Hbar0"]),
+                       E_dress_void=float(b["E_dress_void_PRIMARY"]))
+            blk["_source"] = "sibling_artifact:" + os.path.relpath(LB_ARTIFACT, _REPO)
+            return blk
+        except Exception as e:  # pragma: no cover
+            warnings.warn(f"LB artifact unreadable ({e!r}); using embedded fallback")
+    blk = dict(fv0=LB_FALLBACK["fv0"], Hv_over_Hbar0=LB_FALLBACK["Hv_over_Hbar0"],
+               Hbar_over_Hbar0=LB_FALLBACK["Hbar_over_Hbar0"],
+               gamma_bar0=LB_FALLBACK["gamma_bar0_LB"],
+               gamma_bar_dot=LB_FALLBACK["gamma_bar_dot_LB"],
+               Hdress_over_Hbar0=LB_FALLBACK["Hdress_over_Hbar0"],
+               E_dress_void=LB_FALLBACK["E_dress_void_PRIMARY"])
+    blk["_source"] = "embedded_fallback"
+    return blk
+
+
+def E_max_from_fields(f):
+    """E_max = gamma_bar0*H_v0/Hdress0 - 1 (void-scale maximum) with cross-check identity."""
+    E_max = f["gamma_bar0"] * f["Hv_over_Hbar0"] / f["Hdress_over_Hbar0"] - 1.0
+    E_via_id = f["E_dress_void"] + f["gamma_bar_dot"] / f["Hdress_over_Hbar0"]
+    return E_max, E_via_id
+
+
+# ---------------------------------------------------------------------------
+# radial apparent-H0 profile phi(r): phi(0)=1, monotone decline, phi(r>=r_hom)=0
+# ---------------------------------------------------------------------------
+def phi_profile(r, r_void=R_VOID_CENTRAL, r_hom=R_HOM_CENTRAL, form="raised_cosine"):
+    """Radial apparent-H0 excess shape. phi(0)=1 (void-interior maximum), phi(r>=r_hom)=0.
+
+    Forms (all pinned ONLY by (r_void, r_hom), monotone non-increasing):
+      raised_cosine    : plateau to r_void, C1 cosine taper to r_hom            (central)
+      linear           : plateau to r_void, linear taper to r_hom              (Wiltshire shells)
+      smootherstep     : plateau to r_void, quintic (6t^5-15t^4+10t^3) taper    (softest knee)
+      cosine_no_plateau: cosine taper from r=0 to r_hom (r_void unused)         (earliest decline)
+    """
+    r = np.asarray(r, dtype=float)
+    out = np.zeros_like(r)
+    if form == "cosine_no_plateau":
+        m = r < r_hom
+        out[m] = 0.5 * (1.0 + np.cos(np.pi * r[m] / r_hom))
+        return out
+    plateau = r <= r_void
+    out[plateau] = 1.0
+    taper = (r > r_void) & (r < r_hom)
+    t = (r[taper] - r_void) / (r_hom - r_void)
+    if form == "raised_cosine":
+        out[taper] = 0.5 * (1.0 + np.cos(np.pi * t))
+    elif form == "linear":
+        out[taper] = 1.0 - t
+    elif form == "smootherstep":
+        out[taper] = 1.0 - (6.0 * t ** 5 - 15.0 * t ** 4 + 10.0 * t ** 3)
+    else:
+        raise ValueError(f"unknown phi form {form!r}")
+    return out
+
+
+# ---------------------------------------------------------------------------
+# SH0ES survey geometry
+# ---------------------------------------------------------------------------
+def load_survey():
+    """Parse PantheonSH0ES.dat -> (r_calib, r_hf) for zCMB and zHD, plus counts and z-ranges."""
+    import pandas as pd
+    df = pd.read_csv(DATA, sep=r"\s+")
+    iscal = df["IS_CALIBRATOR"].to_numpy(float).astype(int) == 1
+    used_hf = df["USED_IN_SH0ES_HF"].to_numpy(float).astype(int) == 1
+    hf = (~iscal) & used_hf
+    zCMB = df["zCMB"].to_numpy(float)
+    zHD = df["zHD"].to_numpy(float)
+
+    def r_of(z):
+        return C_KMS * z / 100.0  # h^-1 Mpc
+
+    survey = dict(
+        n_calib=int(iscal.sum()), n_hf=int(hf.sum()),
+        calib_zCMB=zCMB[iscal], calib_zHD=zHD[iscal],
+        hf_zCMB=zCMB[hf], hf_zHD=zHD[hf],
+        calib_r_zCMB=r_of(zCMB[iscal]), calib_r_zHD=r_of(zHD[iscal]),
+        hf_r_zCMB=r_of(zCMB[hf]), hf_r_zHD=r_of(zHD[hf]),
+    )
+    return survey
+
+
+def b_survey(E_max, r_calib, r_hf, r_void=R_VOID_CENTRAL, r_hom=R_HOM_CENTRAL,
+             form="raised_cosine"):
+    """Survey-averaged local Hubble bias the SH0ES ladder measures.
+
+    PRIMARY (physically derived): b_pred_survey = E_max * <phi>_HF.
+      The Cepheid geometric distances that fix M_B are LOCAL wall-frame physical distances,
+      unaffected by the local apparent EXPANSION rate, so M_B is recovered true. The ladder's
+      H0 then follows from the Hubble-flow SNe: H0_meas = cz/d_L = the LOCAL apparent rate AT
+      the HF SNe = Hdress*(1+E_max*phi(r_hf)). Hence the ladder's fractional bias vs the global
+      dressed rate is E_max*<phi>_HF -- the calibrator apparent rate does NOT enter (its only
+      role, fixing M_B, is unbiased). "HF past r_hom -> phi->0" therefore DILUTES the bias.
+
+    Returns (b_primary, phi_calib_mean, phi_hf_mean, b_differential, phi_all_mean).
+      b_differential = E_max*(<phi>_calib - <phi>_HF) is reported as a labelled ALTERNATIVE
+      (the value IF the calibrator anchoring were itself biased by the local rate -- it is not,
+      for geometric Cepheid distances); b_all = E_max*<phi>_survey is a diagnostic only.
+    """
+    phi_c = float(np.mean(phi_profile(r_calib, r_void, r_hom, form)))
+    phi_h = float(np.mean(phi_profile(r_hf, r_void, r_hom, form)))
+    phi_all = float(np.mean(phi_profile(np.concatenate([r_calib, r_hf]), r_void, r_hom, form)))
+    b_primary = E_max * phi_h
+    b_diff = E_max * (phi_c - phi_h)
+    return b_primary, phi_c, phi_h, b_diff, phi_all
+
+
+# ---------------------------------------------------------------------------
+# 2M++ homogeneity-scale cross-check (declared systematic; NOT a fit)
+# ---------------------------------------------------------------------------
+def twompp_homogeneity_scale():
+    """Spherically-averaged cumulative overdensity delta(<r) around the Local Group.
+
+    The scale where the cumulative volume-averaged density contrast settles to ~0 is an
+    external anchor for r_hom; the innermost shells anchor the local-void extent. Cross-check
+    only -- (r_void, r_hom) are Wiltshire's declared values, never fitted to this field.
+    """
+    try:
+        d = np.load(TWOMPP)  # (257,257,257), Galactic Cartesian, 1.5625 h^-1 Mpc spacing
+        n = d.shape[0]
+        c = n // 2                                  # LG at central voxel [128,128,128]
+        dx = 400.0 / 256.0                          # h^-1 Mpc per cell
+        ax = (np.arange(n) - c) * dx
+        X, Y, Z = np.meshgrid(ax, ax, ax, indexing="ij")
+        R = np.sqrt(X * X + Y * Y + Z * Z)
+        edges = np.arange(0.0, 160.0 + dx, 5.0)
+        rc = 0.5 * (edges[:-1] + edges[1:])
+        # cumulative volume-average delta within r (equal-volume voxels -> plain mean)
+        cum = np.array([float(d[R <= e].mean()) if np.any(R <= e) else np.nan
+                        for e in edges[1:]])
+        # shell-average delta
+        shell = np.array([float(d[(R > lo) & (R <= hi)].mean())
+                          if np.any((R > lo) & (R <= hi)) else np.nan
+                          for lo, hi in zip(edges[:-1], edges[1:])])
+        # homogeneity scale: first r where |cum| < 0.02 and stays (approach to mean density)
+        r_hom_est = None
+        for i in range(len(rc)):
+            if np.isfinite(cum[i]) and abs(cum[i]) < 0.02:
+                r_hom_est = float(rc[i])
+                break
+        return dict(
+            available=True, lg_overdensity=float(d[c, c, c]),
+            radii=[round(x, 3) for x in rc.tolist()],
+            cumulative_delta=[None if not np.isfinite(x) else round(x, 5) for x in cum.tolist()],
+            shell_delta=[None if not np.isfinite(x) else round(x, 5) for x in shell.tolist()],
+            r_homogeneity_est_cum_lt_0p02=r_hom_est,
+            note=("Cumulative volume-averaged 2M++ (Carrick+15) overdensity around the LG. "
+                  "|delta(<r)|<0.02 first reached near r_homogeneity_est -- consistent with the "
+                  "adopted r_hom~100 h^-1 Mpc to order-of-magnitude. CROSS-CHECK ONLY; r_void/r_hom "
+                  "are Wiltshire's declared values, not fitted here."))
+    except Exception as e:  # pragma: no cover
+        return dict(available=False, error=repr(e))
+
+
+# ---------------------------------------------------------------------------
+def main():
+    out = {
+        "probe": "bpred_survey_averaged",
+        "purpose": ("Survey-averaged b_pred: the void-scale apparent-H0 MAXIMUM E_max averaged over "
+                    "a radial apparent-H0 profile dH(<r)/Hdress = E_max*phi(r) with the SH0ES "
+                    "calibrator+Hubble-flow survey geometry, its systematic band, and the "
+                    "pre-registered P3 verdict vs b_req."),
+        "reading": "KINEMATIC (forced f_v(z); integrability not enforced).",
+    }
+
+    # =====================================================================
+    # GATE (a): DERIVE the Wiltshire 17-22% window on the tracker
+    # =====================================================================
+    e076 = E_max_tracker(0.76)
+    e0695 = E_max_tracker(0.695)
+    down076 = 1.0 - 1.0 / g_dress(0.76)
+    h0_up_076 = WILT_DRESSED_GLOBAL_H0 * (1.0 + e076)
+    h0_down_076 = WILT_DRESSED_GLOBAL_H0 * (1.0 + down076)
+    a_pass = (round(e076, 3) == WILT_TARGET_076) and (round(e0695, 3) == WILT_TARGET_0695) \
+        and (round(down076, 3) == WILT_DOWN_FLOOR_076)
+    out["gate_a_tracker_window"] = dict(
+        PASS=bool(a_pass),
+        E_max_tracker_fv0_0p76=e076, target_0p76=WILT_TARGET_076,
+        E_max_tracker_fv0_0p695=e0695, target_0p695=WILT_TARGET_0695,
+        down_side_wall_floor_0p76=down076, target_down=WILT_DOWN_FLOOR_076,
+        pairing_up_endpoints=dict(up_at_0p76=e076, up_at_0p695=e0695,
+                                  reading="up-side excess at the two tracker endpoints -> the "
+                                          "17-22% window as an fv0-range [0.76,0.695]"),
+        pairing_up_down_at_0p76=dict(up_at_0p76=e076, down_at_0p76=-down076,
+                                     reading="up/down apparent-Hubble variance at a single fv0=0.76 "
+                                             "-> +0.171 / -0.219 (the '22% present-epoch variance')"),
+        km_s_Mpc_check=dict(dressed_global_H0=WILT_DRESSED_GLOBAL_H0,
+                            H0_up_side_0p76=h0_up_076, H0_down_side_0p76=h0_down_076,
+                            note="61.7*(1+E_max): up-side->%.1f, down-side->%.1f km/s/Mpc; the "
+                                 "down-side matches Wiltshire's ~75 km/s/Mpc maximal local value."
+                                 % (h0_up_076, h0_down_076)),
+        identity="E_max(fv0) = (3/2)/g_dress(fv0) - 1 = 3(2+fv0)/(4 fv0^2 + fv0 + 4) - 1",
+        references=["Wiltshire 2009 arXiv:0909.0749", "review arXiv:0912.5234"],
+        note=("Both pairings reported, neither chosen: the historical '17-22%' is EITHER the "
+              "up-side excess across the tracker fv0 endpoints [0.76->0.171, 0.695->0.220] OR "
+              "the up/down apparent-Hubble variance at fv0=0.76 [+0.171/-0.219]."),
+    )
+
+    # =====================================================================
+    # free-history E_max (LA recomputed via solver; LB read from 1b-A artifact)
+    # =====================================================================
+    fvA = MV.fv_from_nodes(FV_NODES_V, z_nodes=Z_NODES)
+    solA = MV.modelv_solve(fvA, lapse="algebraic", Ngrid=30000)
+    fields_LA = two_scale_at_z0(solA)
+    E_max_LA = fields_LA["E_max"]
+    E_max_LA_id = fields_LA["E_dress_void"] + fields_LA["gamma_bar_dot"] / fields_LA["Hdress_over_Hbar0"]
+
+    fields_LB = load_lb_fields()
+    E_max_LB, E_max_LB_id = E_max_from_fields(fields_LB)
+
+    out["E_max"] = dict(
+        tracker=dict(fv0_0p76=e076, fv0_0p695=e0695),
+        LA=dict(E_max=E_max_LA, gamma_bar0=fields_LA["gamma_bar0"],
+                Hv_over_Hbar0=fields_LA["Hv_over_Hbar0"],
+                Hdress_over_Hbar0=fields_LA["Hdress_over_Hbar0"],
+                gamma_bar_dot=fields_LA["gamma_bar_dot"],
+                E_dress_void_volume_average=fields_LA["E_dress_void"],
+                E_max_via_identity=E_max_LA_id,
+                identity_abs_err=abs(E_max_LA - E_max_LA_id),
+                formula="E_max = gamma_bar0*H_v0/Hdress0 - 1 (pure clock conversion, NO gamma_bar_dot "
+                        "subtraction)"),
+        LB=dict(E_max=E_max_LB, gamma_bar0=fields_LB["gamma_bar0"],
+                Hv_over_Hbar0=fields_LB["Hv_over_Hbar0"],
+                Hdress_over_Hbar0=fields_LB["Hdress_over_Hbar0"],
+                gamma_bar_dot=fields_LB["gamma_bar_dot"],
+                E_dress_void_volume_average=fields_LB["E_dress_void"],
+                E_max_via_identity=E_max_LB_id,
+                identity_abs_err=abs(E_max_LB - E_max_LB_id),
+                source=fields_LB["_source"]),
+    )
+
+    # =====================================================================
+    # GATE (b): small-r ceiling recovers E_max(LA) = 0.33650
+    # =====================================================================
+    phi0 = float(phi_profile(0.0, form=PHI_FORM_CENTRAL))
+    small_r_limit = E_max_LA * phi0
+    b_pass = (round(small_r_limit, 5) == 0.33650) and (abs(E_max_LA - E_max_LA_id) < 1e-9)
+    out["gate_b_small_r_ceiling"] = dict(
+        PASS=bool(b_pass),
+        phi_at_r0=phi0,
+        small_r_limit=small_r_limit,
+        target_E_max_LA=0.33650,
+        E_max_LA=E_max_LA,
+        identity_crosscheck=dict(
+            E_max=E_max_LA, E_dress_void_plus_gammadot_over_Hdress=E_max_LA_id,
+            abs_err=abs(E_max_LA - E_max_LA_id),
+            identity="E_max = E_dress_void + gamma_bar_dot/Hdress"),
+        reconciliation=("0.19480 = VOLUME-AVERAGE excess E_dress_void = (Hvoid_app-Hdress)/Hdress "
+                        "with Hvoid_app = gamma_bar0*H_v - gamma_bar_dot (subtracts the global "
+                        "dressed-scale-factor term). 0.33650 = VOID-SCALE MAXIMUM E_max = "
+                        "gamma_bar0*H_v0/Hdress0 - 1 (pure wall-observer clock conversion, NO "
+                        "subtraction). They differ by exactly gamma_bar_dot/Hdress = %.5f. The "
+                        "committed Wave-1b b_pred (bpred_local_excess.json) mislabeled the "
+                        "volume-average 0.19480 as 'the maximum'; the robust-FAILS verdict there is "
+                        "UNCHANGED and STRENGTHENED by the larger true ceiling."
+                        % (fields_LA["gamma_bar_dot"] / fields_LA["Hdress_over_Hbar0"])),
+    )
+
+    # =====================================================================
+    # GATE (c): large-r limit -> 0
+    # =====================================================================
+    phi_rhom = float(phi_profile(R_HOM_CENTRAL, form=PHI_FORM_CENTRAL))
+    phi_beyond = float(phi_profile(R_HOM_CENTRAL * 1.5, form=PHI_FORM_CENTRAL))
+    large_r_limit = E_max_LA * phi_rhom
+    c_pass = (abs(large_r_limit) < 1e-9) and (abs(phi_beyond) < 1e-12)
+    out["gate_c_large_r_limit"] = dict(
+        PASS=bool(c_pass),
+        phi_at_r_hom=phi_rhom, phi_beyond_r_hom=phi_beyond,
+        large_r_limit=large_r_limit,
+        r_hom=R_HOM_CENTRAL,
+        note="dH(<r)/Hdress -> 0 past the homogeneity scale r_hom~100 h^-1 Mpc: the survey averages "
+             "over the global dressed rate there (no local void bump).",
+    )
+
+    gates_all_pass = a_pass and b_pass and c_pass
+    out["gates_summary"] = dict(gate_a=bool(a_pass), gate_b=bool(b_pass), gate_c=bool(c_pass),
+                                all_pass=bool(gates_all_pass))
+
+    # STOP if any gate fails: no survey number is emitted without all three PASSing.
+    if not gates_all_pass:
+        out["survey_bpred"] = dict(
+            status="NOT_COMPUTED",
+            reason="A validation gate FAILED; per PLAN sec 10 no survey-averaged b_pred is emitted "
+                   "until gates a/b/c all PASS. Inspect gates_summary.")
+        with open(OUT, "w") as f:
+            json.dump(out, f, indent=1)
+        print("!! GATE FAILURE -- see gates_summary; survey number withheld.")
+        print(json.dumps(out["gates_summary"], indent=1))
+        print(f"wrote {OUT}")
+        return
+
+    # =====================================================================
+    # radial profile + SH0ES survey averaging
+    # =====================================================================
+    survey = load_survey()
+    rc_cmb, rh_cmb = survey["calib_r_zCMB"], survey["hf_r_zCMB"]
+    rc_hd, rh_hd = survey["calib_r_zHD"], survey["hf_r_zHD"]
+
+    # central point prediction (LA, raised_cosine, r_void=30, r_hom=100, zCMB)
+    b_central, phi_c, phi_h, b_diff, phi_all = b_survey(
+        E_max_LA, rc_cmb, rh_cmb, R_VOID_CENTRAL, R_HOM_CENTRAL, PHI_FORM_CENTRAL)
+
+    out["radial_profile"] = dict(
+        form_central=PHI_FORM_CENTRAL, r_void_central=R_VOID_CENTRAL, r_hom_central=R_HOM_CENTRAL,
+        r_void_range=list(R_VOID_RANGE), r_hom_range=list(R_HOM_RANGE),
+        forms_tested=["raised_cosine", "linear", "smootherstep", "cosine_no_plateau"],
+        prescription=("phi(0)=1 (void-interior maximum), plateau to r_void, smooth monotone decline "
+                      "to 0 by r_hom; Wiltshire radial apparent-H0 prescription (cf. Wiltshire, "
+                      "Smale, Mattsson & Watson 2013 arXiv:1201.5371). (r_void,r_hom) & form are "
+                      "DECLARED SYSTEMATICS, not fitted."),
+        phi_at_check_radii=dict(
+            r0=float(phi_profile(0.0, form=PHI_FORM_CENTRAL)),
+            r_void=float(phi_profile(R_VOID_CENTRAL, form=PHI_FORM_CENTRAL)),
+            r50=float(phi_profile(50.0, form=PHI_FORM_CENTRAL)),
+            r_hom=float(phi_profile(R_HOM_CENTRAL, form=PHI_FORM_CENTRAL))),
+    )
+
+    out["survey_geometry"] = dict(
+        n_calibrators=survey["n_calib"], n_hubble_flow=survey["n_hf"],
+        calib_z_range_zCMB=[float(survey["calib_zCMB"].min()), float(survey["calib_zCMB"].max())],
+        hf_z_range_zCMB=[float(survey["hf_zCMB"].min()), float(survey["hf_zCMB"].max())],
+        calib_r_range_zCMB=[float(rc_cmb.min()), float(rc_cmb.max())],
+        hf_r_range_zCMB=[float(rh_cmb.min()), float(rh_cmb.max())],
+        calib_frac_inside_r_hom=float(np.mean(rc_cmb < R_HOM_CENTRAL)),
+        hf_frac_inside_r_hom=float(np.mean(rh_cmb < R_HOM_CENTRAL)),
+        hf_frac_inside_r_void=float(np.mean(rh_cmb < R_VOID_CENTRAL)),
+        r_mapping="r_i = c*z_i/100 [h^-1 Mpc]; zCMB first-order (primary), zHD (P4 systematic).",
+    )
+
+    out["b_pred_survey"] = dict(
+        b_pred_survey_central=b_central,
+        E_max_used=E_max_LA, lapse="LA",
+        phi_hf_mean=phi_h, phi_calib_mean=phi_c, phi_survey_mean=phi_all,
+        definition="b_pred_survey = E_max * <phi>_Hubble-flow. The ladder's H0 = cz/d_L over the "
+                   "Hubble-flow SNe traces the LOCAL apparent rate at the HF SNe = "
+                   "Hdress*(1+E_max*phi(r_hf)); M_B is fixed by geometric Cepheid distances "
+                   "(unbiased by the local apparent rate), so the calibrator apparent rate does "
+                   "NOT enter. Fractional bias vs the global dressed rate = E_max*<phi>_HF, the "
+                   "analogue of b_req = Hbar0_anchored/Hbar0_global - 1.",
+        alternative_differential=dict(
+            b_calib_minus_hf=b_diff,
+            note="ALTERNATIVE, NOT primary: E_max*(<phi>_calib - <phi>_HF). Would apply only IF the "
+                 "calibrator anchoring were itself biased by the local apparent rate; it is not "
+                 "(Cepheid distances are geometric). Reported for transparency: because calibrators "
+                 "sit deep in the void (<phi>_calib=%.3f) this OVERSHOOTS to %.5f -- physically "
+                 "inapplicable, shown only to bracket the definitional choice." % (phi_c, b_diff)),
+        diagnostic_whole_survey=dict(
+            b_all=E_max_LA * phi_all,
+            note="Diagnostic only: E_max*<phi> over calibrators+HF together (no physical basis for "
+                 "co-averaging the two populations)."),
+        conventions="LA E_max, raised_cosine phi, r_void=30, r_hom=100 h^-1 Mpc, zCMB.",
+    )
+
+    # =====================================================================
+    # systematic band: sweep form x (r_void, r_hom) x z-choice x lapse
+    # =====================================================================
+    forms = ["raised_cosine", "linear", "smootherstep", "cosine_no_plateau"]
+    rvoids = [R_VOID_RANGE[0], R_VOID_CENTRAL, R_VOID_RANGE[1]]
+    rhoms = [R_HOM_RANGE[0], R_HOM_CENTRAL, R_HOM_RANGE[1]]
+
+    def sweep(E_max, rc, rh, forms_=forms, rvs=rvoids, rhs=rhoms):
+        vals = []
+        for fm in forms_:
+            for rv in rvs:
+                for rh_ in rhs:
+                    b = b_survey(E_max, rc, rh, rv, rh_, fm)[0]
+                    vals.append(b)
+        return np.array(vals)
+
+    # phi-shape systematic (DOMINANT): LA, zCMB, sweep form + (r_void, r_hom)
+    band_phi = sweep(E_max_LA, rc_cmb, rh_cmb)
+    phi_lo, phi_hi = float(band_phi.min()), float(band_phi.max())
+    sig_phi = float((phi_hi - phi_lo) / 2.0)
+
+    # zHD-vs-zCMB systematic (P4): central form/scales, LA
+    b_zhd = b_survey(E_max_LA, rc_hd, rh_hd, R_VOID_CENTRAL, R_HOM_CENTRAL, PHI_FORM_CENTRAL)[0]
+    sig_z = float(abs(b_central - b_zhd))
+
+    # lapse LA/LB systematic (V0 EXCLUDED -- no-dressing null control): central form/scales, zCMB
+    b_lb = b_survey(E_max_LB, rc_cmb, rh_cmb, R_VOID_CENTRAL, R_HOM_CENTRAL, PHI_FORM_CENTRAL)[0]
+    sig_lapse = float(abs(b_central - b_lb) / 2.0)
+
+    # full band over everything (report as the honest envelope)
+    band_full = np.concatenate([sweep(E_max_LA, rc_cmb, rh_cmb),
+                                sweep(E_max_LB, rc_cmb, rh_cmb),
+                                sweep(E_max_LA, rc_hd, rh_hd),
+                                sweep(E_max_LB, rc_hd, rh_hd)])
+    out["systematic_band"] = dict(
+        phi_shape_band=dict(lo=phi_lo, hi=phi_hi, half_range=sig_phi,
+                            note="DOMINANT systematic: sweep phi form {raised_cosine, linear, "
+                                 "smootherstep, cosine_no_plateau} x r_void{20,30,40} x r_hom"
+                                 "{80,100,120}, LA E_max, zCMB."),
+        zHD_vs_zCMB_shift=dict(b_zCMB=b_central, b_zHD=b_zhd, abs_shift=sig_z,
+                               note="P4 systematic: zHD carries LCDM/2M++ peculiar-velocity "
+                                    "corrections; zCMB is the first-order primary."),
+        lapse_LA_LB=dict(b_LA=b_central, b_LB=b_lb, half_range=sig_lapse,
+                         note="LA/LB lapse-reading spread; V0 EXCLUDED (no-dressing null control)."),
+        full_envelope=dict(lo=float(band_full.min()), hi=float(band_full.max())),
+    )
+
+    # =====================================================================
+    # b_req (recompute) + sigma + P3 verdict
+    # =====================================================================
+    phaseF = json.load(open(PHASEF))
+    adv = json.load(open(ADV))
+    Hbar0_anch = float(phaseF["variants"]["main_z001"]["free_fixed"]["scale"])
+    scale_err = float(phaseF["variants"]["main_z001"]["free_fixed"]["scale_err_sym"])
+    Hbar0_glob = float(phaseF["global_reference"]["Hbar0"])
+    b_req = Hbar0_anch / Hbar0_glob - 1.0
+    b_req_adv = float(adv["local_excess"]["excess_Hbar0"])
+    out["b_req"] = dict(
+        b_req=b_req, Hbar0_anchored=Hbar0_anch, Hbar0_global=Hbar0_glob,
+        formula="Hbar0_anchored / Hbar0_global - 1",
+        crosscheck_adv_anchored_h0=b_req_adv, crosscheck_abs_err=abs(b_req - b_req_adv),
+        crosscheck_phaseF=float(phaseF["delta_local_excess"]["excess_Hbar0_local_over_global"]),
+    )
+
+    sig_anch = scale_err / Hbar0_anch
+    sig_glob = 0.010  # ESTIMATE (b_req's fixed shape cancels; only the Hbar0 SCALE error matters,
+                      # not reported by Probe-R; retained as a subdominant placeholder)
+    sigma_total = float(np.sqrt(sig_anch ** 2 + sig_glob ** 2 + sig_lapse ** 2 + sig_phi ** 2))
+    # measurement-only sigma EXCLUDES the theoretical phi-shape band -- exposes whether the
+    # pre-registered verdict is carried by agreement or by an inflated theoretical systematic.
+    sigma_meas_only = float(np.sqrt(sig_anch ** 2 + sig_glob ** 2 + sig_lapse ** 2))
+    out["sigma_components"] = dict(
+        anchored_scale=float(sig_anch),
+        anchored_scale_note="phaseF free_fixed scale_err_sym / Hbar0_anchored (SH0ES/SN anchoring).",
+        global_fit=float(sig_glob), global_fit_flag="ESTIMATE",
+        global_fit_note="PLACEHOLDER: b_req's fixed shape cancels; the relevant Hbar0 SCALE error is "
+                        "not reported by Probe-R. Subdominant to sigma_phi.",
+        lapse_LA_LB_halfrange=float(sig_lapse),
+        lapse_note="LA/LB lapse-reading spread on b_pred_survey; V0 excluded (no-dressing control).",
+        phi_shape_halfrange=float(sig_phi),
+        phi_shape_flag="DOMINANT",
+        phi_shape_note="Dominant systematic: the radial-profile form + (r_void, r_hom) band.",
+    )
+    out["sigma_total"] = sigma_total
+    out["sigma_measurement_only"] = sigma_meas_only
+
+    diff = float(b_central - b_req)
+    nsigma = float(abs(diff) / sigma_total)
+    nsigma_meas = float(abs(diff) / sigma_meas_only)
+    out["diff"] = dict(b_pred_survey_minus_b_req=diff)
+    out["nsigma"] = nsigma
+    out["nsigma_measurement_only"] = nsigma_meas
+
+    def verdict_of(ns):
+        return "RESOLVES" if ns <= 1.0 else ("PARTIAL" if ns <= 2.0 else "FAILS")
+
+    # Robustness: does the verdict hold across the full systematic envelope of b_pred_survey?
+    ns_env_lo = float(abs(float(band_full.min()) - b_req) / sigma_total)
+    ns_env_hi = float(abs(float(band_full.max()) - b_req) / sigma_total)
+    v_central = verdict_of(nsigma)
+    v_env_lo = verdict_of(ns_env_lo)
+    v_env_hi = verdict_of(ns_env_hi)
+    robust = (v_central == v_env_lo == v_env_hi)
+    primary_token = v_central + ("" if robust else "_FRAGILE")
+    v_robust = v_central if robust else "|".join(sorted(set([v_central, v_env_lo, v_env_hi])))
+
+    v_meas = verdict_of(nsigma_meas)
+    out["verdict"] = dict(
+        verdict_preregistered=primary_token,
+        verdict_robust=v_robust,
+        verdict_measurement_sigma_only=v_meas,
+        robust=bool(robust),
+        headline=("UNDER-PREDICTS: b_pred_survey (central %.5f) < b_req (%.5f) at the central value "
+                  "and across the ENTIRE systematic band. The pre-registered nsigma=%.2f (%s) is "
+                  "PARTIAL only because the dominant phi-shape THEORETICAL systematic (half-range "
+                  "%.5f) inflates sigma; dropping it (measurement-only sigma %.5f) gives nsigma=%.2f "
+                  "-> %s. The dressing mechanism does not produce the required survey-averaged local "
+                  "bias even with the corrected (larger) void-scale maximum E_max=%.5f."
+                  % (b_central, b_req, nsigma, primary_token, sig_phi, sigma_meas_only,
+                     nsigma_meas, v_meas, E_max_LA)),
+        basis=("P3 equality test |b_pred_survey - b_req| = %.5f vs 1sigma = %.5f (nsigma = %.3f). "
+               "b_pred_survey = %.5f (LA, raised_cosine, r_void=30, r_hom=100, zCMB); b_req = %.5f."
+               % (abs(diff), sigma_total, nsigma, b_central, b_req)),
+        thresholds="RESOLVES nsigma<=1 ; PARTIAL <=2 ; FAILS >2 (PLAN P3).",
+        envelope_check=dict(b_env_lo=float(band_full.min()), b_env_hi=float(band_full.max()),
+                            nsigma_env_lo=ns_env_lo, nsigma_env_hi=ns_env_hi,
+                            verdict_env_lo=v_env_lo, verdict_env_hi=v_env_hi),
+        under_prediction=dict(
+            b_pred_below_b_req_at_central=bool(b_central < b_req),
+            b_pred_below_b_req_across_full_band=bool(float(band_full.max()) < b_req),
+            note=("b_pred_survey UNDER-predicts b_req at the central value AND across the ENTIRE "
+                  "systematic band (max %.5f < b_req %.5f): the dressing mechanism does not produce "
+                  "the required survey-averaged local bias even with the corrected (larger) "
+                  "void-scale maximum. This is a DIRECTIONAL FAILS (under-prediction); the "
+                  "pre-registered nsigma is softened only by the wide phi-shape systematic, not by "
+                  "agreement." % (float(band_full.max()), b_req))),
+        dilution_finding=("The void-scale MAXIMUM E_max(LA)=%.5f is diluted to b_pred_survey=%.5f "
+                          "(%.1fx) because the ladder's H0 traces the apparent rate at the "
+                          "Hubble-flow SNe: <phi>_HF=%.3f (r~69-450, ~%.0f%% past r_hom -> phi->0). "
+                          "The calibrators sit deep in the bump (<phi>_calib=%.3f) but only fix M_B "
+                          "via geometric distances, so their enhancement does not enter the bias."
+                          % (E_max_LA, b_central,
+                             (E_max_LA / b_central) if b_central else float("inf"),
+                             phi_h, 100.0 * (1.0 - out["survey_geometry"]["hf_frac_inside_r_hom"]),
+                             phi_c)),
+    )
+
+    # =====================================================================
+    # 2M++ homogeneity cross-check (optional; declared systematic)
+    # =====================================================================
+    out["twompp_crosscheck"] = twompp_homogeneity_scale()
+
+    # =====================================================================
+    # machinery status
+    # =====================================================================
+    out["machinery_status"] = dict(
+        gates_all_pass=bool(gates_all_pass),
+        window_IS_derivable=True,
+        supersedes=("The Wiltshire 17-22% window IS DERIVABLE from the two-scale structure via "
+                    "E_max(fv0)=(3/2)/g_dress-1 (gate a) -- this SUPERSEDES the paper-1-issue "
+                    "premise that freshH0 has no window-computing machinery, FOR THE DERIVATION. "
+                    "The prior finding that freshH0's WINDOW=(0.17,0.22) is a HARD-CODED literal "
+                    "remains a provenance issue for that script, but the number itself is now "
+                    "reproduced from first principles."),
+        prior_bpred_note=("bpred_local_excess.json used the VOLUME-AVERAGE E_dress_void (0.19480 LA) "
+                          "and mislabeled it 'the maximum'. Corrected here: E_max(LA)=%.5f is the "
+                          "void-scale maximum; its robust-FAILS conclusion is unchanged and "
+                          "strengthened by the larger ceiling." % E_max_LA),
+        survey_averaged_bpred="COMPUTED (this artifact) -- was OUT_OF_SCOPE in Wave-1b.",
+    )
+
+    with open(OUT, "w") as f:
+        json.dump(out, f, indent=1)
+
+    # ---- console summary ----
+    print("=== GATE (a) tracker window ===")
+    print(f"  E_max(0.76)  = {e076:.5f}  (target 0.171)")
+    print(f"  E_max(0.695) = {e0695:.5f}  (target 0.220)")
+    print(f"  down floor(0.76) = {down076:.5f}  (target 0.219)")
+    print(f"  61.7*(1+E_max): up={h0_up_076:.1f}  down={h0_down_076:.1f} km/s/Mpc")
+    print(f"  GATE (a) PASS = {a_pass}")
+    print("=== GATE (b) small-r ceiling ===")
+    print(f"  E_max(LA) = {E_max_LA:.5f}  via identity = {E_max_LA_id:.5f}  (target 0.33650)")
+    print(f"  small-r limit (E_max*phi(0)) = {small_r_limit:.5f}")
+    print(f"  reconcile: E_dress_void(0.19480) + gamma_dot/Hdress = E_max")
+    print(f"  GATE (b) PASS = {b_pass}")
+    print("=== GATE (c) large-r limit ===")
+    print(f"  phi(r_hom)={phi_rhom:.2e}  E_max*phi(r_hom)={large_r_limit:.2e}")
+    print(f"  GATE (c) PASS = {c_pass}")
+    print(f"=== ALL GATES PASS = {gates_all_pass} ===")
+    print("=== SURVEY-AVERAGED b_pred ===")
+    print(f"  n_calib={survey['n_calib']}  n_HF={survey['n_hf']}")
+    print(f"  <phi>_calib={phi_c:.4f}  <phi>_HF={phi_h:.4f}")
+    print(f"  b_pred_survey (central, LA) = {b_central:.5f}")
+    print(f"  phi-shape band = [{phi_lo:.5f}, {phi_hi:.5f}]  (half-range {sig_phi:.5f})")
+    print(f"  full envelope  = [{band_full.min():.5f}, {band_full.max():.5f}]")
+    print(f"  E_max(LB) reading b_pred_survey = {b_lb:.5f}")
+    print("=== b_req / sigma / verdict ===")
+    print(f"  b_req = {b_req:.5f}  (adv xcheck err {abs(b_req-b_req_adv):.1e})")
+    print(f"  sigma: anch={sig_anch:.5f} glob={sig_glob:.5f}(EST) lapse={sig_lapse:.5f} "
+          f"phi={sig_phi:.5f}(DOM) -> total={sigma_total:.5f}")
+    print(f"  diff = {diff:.5f}  nsigma = {nsigma:.3f}  ({primary_token})")
+    print(f"  measurement-only sigma (no phi band) = {sigma_meas_only:.5f} -> nsigma = "
+          f"{nsigma_meas:.3f} ({v_meas})")
+    print(f"  UNDER-PREDICTS: b_pred_survey < b_req at central AND across full band "
+          f"(band max {band_full.max():.5f} < b_req {b_req:.5f})")
+    print(f"  VERDICT (pre-registered) = {primary_token}   robust = {v_robust}")
+    print(f"  dilution: E_max {E_max_LA:.4f} -> b_pred_survey {b_central:.4f} "
+          f"({(E_max_LA/b_central) if b_central else float('inf'):.1f}x)")
+    print(f"wrote {OUT}")
+
+
+if __name__ == "__main__":
+    main()
