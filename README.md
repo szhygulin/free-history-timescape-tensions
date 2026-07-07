@@ -1,5 +1,8 @@
 # Free-history timescape vs. the cosmological tensions
 
+> **⚠️ Archived — merged into [`free-history-timescape`](https://github.com/szhygulin/free-history-timescape).**
+> This work is now **Part II** of the combined paper *"Free-history timescape: a data-driven void history reconciles the supernova–BAO–CMB geometry but does not resolve the Hubble tension."* The code, results, and notes here live under [`free-history-timescape/tensions/`](https://github.com/szhygulin/free-history-timescape/tree/main/tensions); this repository is retained read-only as the per-commit history of record. New work happens in the combined repo.
+
 **Does a data-driven void history resolve not just the Hubble tension, but the full suite of ΛCDM tensions?**
 
 Author: **Viacheslav Zhygulin**
